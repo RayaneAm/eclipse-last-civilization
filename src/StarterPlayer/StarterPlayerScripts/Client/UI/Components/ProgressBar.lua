@@ -29,13 +29,19 @@ function ProgressBar.new(options: ProgressBarOptions): (Frame, (fraction: number
 	track.Position = options.Position or UDim2.fromScale(0, 0)
 	track.AnchorPoint = options.AnchorPoint or Vector2.new(0, 0)
 	track.LayoutOrder = options.LayoutOrder or 0
-	track.BackgroundColor3 = Theme.Colors.PanelBackground
-	track.BackgroundTransparency = 0.5
+	track.BackgroundColor3 = Theme.Colors.CardBackground
+	track.BackgroundTransparency = 0.02
 	track.BorderSizePixel = 0
 
 	local trackCorner = Instance.new("UICorner")
 	trackCorner.CornerRadius = Theme.Corner.Pill
 	trackCorner.Parent = track
+
+	local trackStroke = Instance.new("UIStroke")
+	trackStroke.Color = Theme.Colors.TextMuted
+	trackStroke.Thickness = 1
+	trackStroke.Transparency = 0.58
+	trackStroke.Parent = track
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"

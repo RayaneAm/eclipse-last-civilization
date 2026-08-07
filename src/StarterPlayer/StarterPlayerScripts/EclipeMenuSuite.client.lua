@@ -4,7 +4,7 @@
 
     INSTALL:
       1. Put this LocalScript in StarterPlayer > StarterPlayerScripts.
-      2. Press Play. A five-button demo dock appears at the bottom.
+      2. Connect your HUD buttons through _G.EclipseUI.Open(...).
       3. Replace the demo data in DATA with your real client-readable data.
       4. Connect ACTION() to your own RemoteEvents / server systems.
 
@@ -26,14 +26,14 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local CONFIG = {
 	GuiName = "EclipseSurvivorUI",
-	ShowDemoDock = true,
-	OpenOnStart = "Inventory", -- false, "Shop", "Offer", "Marketplace", "Supply", "Inventory"
 	CurrencyName = "SCRAP",
 	CurrencyAmount = 12450,
 	PremiumCurrencyName = "ROBUX",
@@ -50,8 +50,6 @@ local CONFIG = {
 		OfferEndsAtAttribute = "NewPlayerOfferEndsAt",
 		StudioPreviewSeconds = 24 * 60 * 60,
 	},
-	-- Optional: set true once your old menu-opening buttons already exist.
-	AutoConnectExistingButtons = true,
 }
 
 local DATA = {
@@ -106,10 +104,12 @@ local DATA = {
 local C = {
 	Ink = Color3.fromRGB(25, 31, 42),
 	Ink2 = Color3.fromRGB(43, 52, 68),
-	Steel = Color3.fromRGB(83, 98, 119),
-	Canvas = Color3.fromRGB(237, 242, 246),
-	Paper = Color3.fromRGB(251, 252, 253),
-	Muted = Color3.fromRGB(105, 117, 134),
+	Steel = Color3.fromRGB(102, 94, 122),
+	Canvas = Color3.fromRGB(14, 13, 22),
+	Paper = Color3.fromRGB(29, 26, 40),
+	Surface = Color3.fromRGB(37, 33, 50),
+	Border = Color3.fromRGB(82, 72, 108),
+	Muted = Color3.fromRGB(164, 157, 181),
 	White = Color3.fromRGB(255, 255, 255),
 	Cyan = Color3.fromRGB(38, 190, 224),
 	Purple = Color3.fromRGB(116, 83, 238),
@@ -130,6 +130,11 @@ if old then
 	old:Destroy()
 end
 
+local oldBackdrop = playerGui:FindFirstChild("EclipseSurvivorBackdrop")
+if oldBackdrop then
+	oldBackdrop:Destroy()
+end
+
 local function create(className, props, parent)
 	local object = Instance.new(className)
 	for key, value in pairs(props or {}) do
@@ -140,15 +145,14 @@ local function create(className, props, parent)
 end
 
 local function round(parent, radius)
-	-- Deliberately square: Eclipse now uses hard rectangular survivor-tech panels.
-	return create("UICorner", {CornerRadius = UDim.new(0, 0)}, parent)
+	return create("UICorner", {CornerRadius = UDim.new(0, radius or 10)}, parent)
 end
 
 local function stroke(parent, color, thickness, transparency)
 	return create("UIStroke", {
 		Color = color or C.Ink,
-		Thickness = thickness or 2,
-		Transparency = transparency or 0,
+		Thickness = thickness or 1,
+		Transparency = transparency or 0.2,
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 	}, parent)
 end
@@ -177,7 +181,7 @@ local function label(parent, text, size, position, textSize, color, align, font)
 		Text = text,
 		Font = font or FONT,
 		TextSize = textSize or 16,
-		TextColor3 = color or C.Ink,
+		TextColor3 = color or C.White,
 		TextXAlignment = align or Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Center,
 	}, parent)
@@ -195,33 +199,37 @@ local function button(parent, text, size, position, bg, fg)
 		TextColor3 = fg or C.White,
 	}, parent)
 	round(b, 10)
-	stroke(b, C.Ink, 2)
+	stroke(b, C.Border, 1, 0.2)
+	local interactionScale = create("UIScale", {Scale = 1}, b)
 
 	b:SetAttribute("BaseColor", b.BackgroundColor3)
 	b.MouseEnter:Connect(function()
 		local baseColor = b:GetAttribute("BaseColor") or b.BackgroundColor3
 		TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = baseColor:Lerp(C.White, 0.12)}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.12), {Scale = 1.02}):Play()
 	end)
 	b.MouseLeave:Connect(function()
 		local baseColor = b:GetAttribute("BaseColor") or b.BackgroundColor3
 		TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = baseColor}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.12), {Scale = 1}):Play()
+	end)
+	b.SelectionGained:Connect(function()
+		local baseColor = b:GetAttribute("BaseColor") or b.BackgroundColor3
+		TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = baseColor:Lerp(C.White, 0.12)}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.12), {Scale = 1.02}):Play()
+	end)
+	b.SelectionLost:Connect(function()
+		local baseColor = b:GetAttribute("BaseColor") or b.BackgroundColor3
+		TweenService:Create(b, TweenInfo.new(0.1), {BackgroundColor3 = baseColor}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.12), {Scale = 1}):Play()
 	end)
 	b.MouseButton1Down:Connect(function()
-		TweenService:Create(b, TweenInfo.new(0.06), {Rotation = -1}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.07), {Scale = 0.98}):Play()
 	end)
 	b.MouseButton1Up:Connect(function()
-		TweenService:Create(b, TweenInfo.new(0.08), {Rotation = 0}):Play()
+		TweenService:Create(interactionScale, TweenInfo.new(0.1), {Scale = 1.02}):Play()
 	end)
 	return b
-end
-
-local function compactNumber(n)
-	if n >= 1000000 then
-		return string.format("%.1fM", n / 1000000)
-	elseif n >= 1000 then
-		return string.format("%.1fK", n / 1000)
-	end
-	return tostring(n)
 end
 
 local gui = create("ScreenGui", {
@@ -232,38 +240,58 @@ local gui = create("ScreenGui", {
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, playerGui)
 
--- Soft modal dim. This keeps the world visible, like a polished simulator menu,
--- while the inner surfaces stay original to Eclipse.
+-- Keep the backdrop in its own inset-ignoring ScreenGui. This lets the gray
+-- layer cover every screen edge (including behind the Roblox top bar) without
+-- changing the position of the centered menu window.
+local backdropGui = create("ScreenGui", {
+	Name = "EclipseSurvivorBackdrop",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	DisplayOrder = 79,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, playerGui)
+
 local dim = create("TextButton", {
 	Name = "ModalDim",
 	AutoButtonColor = false,
-	BackgroundColor3 = Color3.fromRGB(4, 9, 15),
-	BackgroundTransparency = 0.28,
+	Active = true,
+	Modal = true,
+	BackgroundColor3 = Color3.fromRGB(38, 39, 44),
+	BackgroundTransparency = 0.45,
 	BorderSizePixel = 0,
 	Size = UDim2.fromScale(1, 1),
 	Text = "",
 	Visible = false,
-}, gui)
+}, backdropGui)
 
-local window = create("Frame", {
+local window = create("CanvasGroup", {
 	Name = "Window",
 	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.46),
 	Size = UDim2.fromOffset(1030, 590),
 	BackgroundColor3 = C.Canvas,
 	BorderSizePixel = 0,
-}, dim)
+	GroupTransparency = 0,
+	Visible = false,
+	SelectionGroup = true,
+}, gui)
 round(window, 18)
-stroke(window, C.Ink, 4)
+stroke(window, C.Border, 2, 0.08)
 
-local scaler = create("UIScale", {Scale = 1}, window)
+local scaler = create("UIScale", {Scale = 0.94}, window)
+local baseWindowScale = 0.94
+local windowYScale = 0.46
 
 local function updateScale()
 	local camera = workspace.CurrentCamera
 	if not camera then return end
 	local v = camera.ViewportSize
-	-- Target canvas is roughly 1120 x 690. This also fits landscape phones/tablets.
-	scaler.Scale = math.clamp(math.min(v.X / 1120, v.Y / 690), 0.34, 1)
+	-- Reserve a slim top lane for the compact quest chip. Short displays move
+	-- the panel slightly down and shrink it enough that the two never overlap.
+	windowYScale = if v.Y < 760 then 0.52 else 0.46
+	baseWindowScale = math.clamp(math.min(v.X / 1120, (v.Y - 48) / 690), 0.34, 0.94)
+	scaler.Scale = baseWindowScale
+	window.Position = UDim2.fromScale(0.5, windowYScale)
 end
 
 
@@ -287,12 +315,19 @@ local shadow = create("Frame", {
 }, window)
 round(shadow, 20)
 
+local contentMotionGroup = create("CanvasGroup", {
+	Name = "ContentMotion",
+	Size = UDim2.fromScale(1, 1),
+	BackgroundTransparency = 1,
+	GroupTransparency = 0,
+}, window)
+
 local header = create("Frame", {
 	Name = "Header",
 	Size = UDim2.new(1, 0, 0, 92),
 	BackgroundColor3 = C.Ink,
 	BorderSizePixel = 0,
-}, window)
+}, contentMotionGroup)
 round(header, 15)
 gradient(header, Color3.fromRGB(36, 45, 61), Color3.fromRGB(21, 27, 38), 0)
 
@@ -319,33 +354,51 @@ stroke(titleIcon, C.White, 2, 0.15)
 local title = label(header, "INVENTORY", UDim2.fromOffset(420, 40), UDim2.fromOffset(100, 13), 28, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
 local kicker = label(header, "ECLIPSE // SURVIVOR SYSTEM", UDim2.fromOffset(480, 24), UDim2.fromOffset(101, 52), 12, Color3.fromRGB(163, 181, 203), Enum.TextXAlignment.Left, FONT)
 
-local currency = create("Frame", {
-	AnchorPoint = Vector2.new(1, 0.5),
-	Position = UDim2.new(1, -92, 0.5, 0),
-	Size = UDim2.fromOffset(200, 46),
-	BackgroundColor3 = Color3.fromRGB(48, 57, 70),
+local close = create("TextButton", {
+	AutoButtonColor = false,
+	AnchorPoint = Vector2.new(1, 0),
+	Position = UDim2.new(1, -18, 0, 24),
+	Size = UDim2.fromOffset(44, 44),
+	BackgroundColor3 = C.Ink2,
 	BorderSizePixel = 0,
+	Text = "X",
+	Font = FONT_HEAVY,
+	TextSize = 18,
+	TextColor3 = C.Red,
 }, header)
-round(currency, 12)
-stroke(currency, C.Gold, 2)
-local coin = create("TextLabel", {
-	Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(7, 6),
-	BackgroundColor3 = C.Gold, Text = "S", Font = FONT_HEAVY, TextSize = 18, TextColor3 = C.Ink,
-}, currency)
-round(coin, 17)
-label(currency, compactNumber(CONFIG.CurrencyAmount), UDim2.fromOffset(94, 28), UDim2.fromOffset(50, 3), 19, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
-label(currency, CONFIG.CurrencyName, UDim2.fromOffset(110, 18), UDim2.fromOffset(50, 25), 10, Color3.fromRGB(190, 197, 208), Enum.TextXAlignment.Left, FONT)
-
-local close = button(header, "X", UDim2.fromOffset(58, 58), UDim2.new(1, -72, 0, 17), C.Red, C.White)
-close.TextSize = 23
-stroke(close, C.White, 3)
+round(close, 10)
+stroke(close, C.Red, 1, 0.42)
+close.MouseEnter:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {
+		BackgroundColor3 = C.Red,
+		TextColor3 = C.White,
+	}):Play()
+end)
+close.MouseLeave:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {
+		BackgroundColor3 = C.Ink2,
+		TextColor3 = C.Red,
+	}):Play()
+end)
+close.SelectionGained:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {
+		BackgroundColor3 = C.Red,
+		TextColor3 = C.White,
+	}):Play()
+end)
+close.SelectionLost:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {
+		BackgroundColor3 = C.Ink2,
+		TextColor3 = C.Red,
+	}):Play()
+end)
 
 local content = create("Frame", {
 	Name = "Content",
 	Position = UDim2.fromOffset(18, 108),
 	Size = UDim2.new(1, -36, 1, -126),
 	BackgroundTransparency = 1,
-}, window)
+}, contentMotionGroup)
 
 local toast = create("TextLabel", {
 	AnchorPoint = Vector2.new(0.5, 1),
@@ -383,7 +436,26 @@ local function showToast(message, accent)
 	end)
 end
 
-local function promptRobuxPurchase(item)
+local purchasePromptPending = false
+local purchasePromptToken = 0
+local pendingPurchaseButton = nil
+
+local function setPurchaseButtonPending(buttonObject, pending)
+	if not buttonObject or not buttonObject.Parent then
+		return
+	end
+	buttonObject.Active = not pending
+	buttonObject.Selectable = not pending
+	buttonObject.BackgroundTransparency = if pending then 0.25 else 0
+end
+
+local function clearPendingPurchase()
+	purchasePromptPending = false
+	setPurchaseButtonPending(pendingPurchaseButton, false)
+	pendingPurchaseButton = nil
+end
+
+local function promptRobuxPurchase(item, sourceButton)
 	local purchaseType = item.purchaseType or item.PurchaseType
 	local purchaseId = tonumber(item.purchaseId or item.PurchaseId) or 0
 
@@ -392,11 +464,29 @@ local function promptRobuxPurchase(item)
 		return
 	end
 
+	if purchasePromptPending then
+		showToast("PURCHASE PENDING // Rond eerst de huidige Roblox-aankoop af.", C.Gold)
+		return
+	end
+
+	purchasePromptPending = true
+	pendingPurchaseButton = sourceButton
+	setPurchaseButtonPending(pendingPurchaseButton, true)
+	purchasePromptToken += 1
+	local token = purchasePromptToken
+	task.delay(30, function()
+		if purchasePromptPending and token == purchasePromptToken then
+			clearPendingPurchase()
+			showToast("PURCHASE TIMEOUT // Probeer het opnieuw.", C.Red)
+		end
+	end)
+
 	if purchaseType == "GamePass" then
 		local ownsOk, alreadyOwns = pcall(function()
 			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, purchaseId)
 		end)
 		if ownsOk and alreadyOwns then
+			clearPendingPurchase()
 			showToast("OWNED // Deze upgrade staat al op je account.", C.Green)
 			return
 		end
@@ -405,22 +495,30 @@ local function promptRobuxPurchase(item)
 			MarketplaceService:PromptGamePassPurchase(player, purchaseId)
 		end)
 		if not ok then
+			clearPendingPurchase()
 			showToast("ROBLOX // Purchase prompt kon niet worden geopend.", C.Red)
+		else
+			showToast("PURCHASE PENDING // Roblox-aankoopvenster geopend.", C.Gold)
 		end
 	elseif purchaseType == "DeveloperProduct" then
 		local ok = pcall(function()
 			MarketplaceService:PromptProductPurchase(player, purchaseId)
 		end)
 		if not ok then
+			clearPendingPurchase()
 			showToast("ROBLOX // Purchase prompt kon niet worden geopend.", C.Red)
+		else
+			showToast("PURCHASE PENDING // Roblox-aankoopvenster geopend.", C.Gold)
 		end
 	else
+		clearPendingPurchase()
 		showToast("SETUP // PurchaseType moet GamePass of DeveloperProduct zijn.", C.Red)
 	end
 end
 
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(who, gamePassId, wasPurchased)
 	if who ~= player then return end
+	clearPendingPurchase()
 	if wasPurchased then
 		showToast("PURCHASE COMPLETE // Roblox heeft de Game Pass bevestigd.", C.Green)
 	else
@@ -431,6 +529,7 @@ end)
 
 MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, wasPurchased)
 	if userId ~= player.UserId then return end
+	clearPendingPurchase()
 	if wasPurchased then
 		-- Developer Product rewards still belong in a server-side ProcessReceipt handler.
 		showToast("PAYMENT SENT // Server verwerkt nu de aankoop.", C.Green)
@@ -460,8 +559,27 @@ local function section(parent, size, position, background)
 		BorderSizePixel = 0,
 	}, parent)
 	round(f, 14)
-	stroke(f, C.Ink, 2)
+	stroke(f, C.Border, 1, 0.18)
 	return f
+end
+
+local function stateCard(parent, titleText, bodyText, accent)
+	local frame = section(parent, UDim2.fromOffset(230, 112), nil, C.Paper)
+	frame.Name = "StateCard"
+
+	local rail = create("Frame", {
+		Size = UDim2.new(0, 3, 1, -20),
+		Position = UDim2.fromOffset(8, 10),
+		BackgroundColor3 = accent or C.Purple,
+		BorderSizePixel = 0,
+	}, frame)
+	round(rail, 2)
+
+	label(frame, titleText, UDim2.new(1, -34, 0, 26), UDim2.fromOffset(22, 14), 12, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
+	local body = label(frame, bodyText, UDim2.new(1, -34, 0, 48), UDim2.fromOffset(22, 42), 10, C.Muted, Enum.TextXAlignment.Left, FONT)
+	body.TextWrapped = true
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	return frame
 end
 
 local function chip(parent, text, color, size, position)
@@ -483,11 +601,11 @@ local function searchBox(parent, placeholder, position, size)
 	local shell = create("Frame", {
 		Position = position,
 		Size = size,
-		BackgroundColor3 = C.White,
+		BackgroundColor3 = C.Surface,
 		BorderSizePixel = 0,
 	}, parent)
 	round(shell, 12)
-	stroke(shell, C.Ink, 2)
+	stroke(shell, C.Border, 1, 0.16)
 	label(shell, "?", UDim2.fromOffset(34, 34), UDim2.fromOffset(8, 3), 17, C.Muted, Enum.TextXAlignment.Center, FONT_HEAVY)
 	local box = create("TextBox", {
 		BackgroundTransparency = 1,
@@ -497,7 +615,7 @@ local function searchBox(parent, placeholder, position, size)
 		PlaceholderText = placeholder or "Search",
 		PlaceholderColor3 = Color3.fromRGB(153, 162, 176),
 		Text = "",
-		TextColor3 = C.Ink,
+		TextColor3 = C.White,
 		TextSize = 15,
 		Font = FONT,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -593,7 +711,9 @@ local function robuxBuyButton(parent, price, size, position, callback)
 		Thickness = 3.25,
 		Transparency = 0,
 	}, priceLabel)
-	buy.MouseButton1Click:Connect(callback)
+	buy.MouseButton1Click:Connect(function()
+		callback(buy)
+	end)
 	return buy
 end
 
@@ -795,11 +915,11 @@ local function card(parent, item, cardSize)
 	local accent = C[item.accent] or C.Cyan
 	local f = create("Frame", {
 		Size = cardSize or UDim2.fromOffset(222, 285),
-		BackgroundColor3 = C.White,
+		BackgroundColor3 = C.Surface,
 		BorderSizePixel = 0,
 	}, parent)
 	round(f, 13)
-	stroke(f, C.Ink, 2.5)
+	stroke(f, C.Border, 1, 0.12)
 
 	local visual = create("Frame", {
 		Position = UDim2.fromOffset(10, 10),
@@ -814,7 +934,7 @@ local function card(parent, item, cardSize)
 		chip(visual, item.badge, C.Ink, UDim2.fromOffset(82, 21), UDim2.new(1, -90, 0, 8))
 	end
 
-	label(f, item.title, UDim2.new(1, -22, 0, 24), UDim2.fromOffset(12, 126), 15, C.Ink, Enum.TextXAlignment.Left, FONT_HEAVY)
+	label(f, item.title, UDim2.new(1, -22, 0, 24), UDim2.fromOffset(12, 126), 15, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
 	local desc = label(f, item.subtitle or "", UDim2.new(1, -22, 0, 42), UDim2.fromOffset(12, 151), 11, C.Muted, Enum.TextXAlignment.Left, FONT)
 	desc.TextWrapped = true
 	desc.TextYAlignment = Enum.TextYAlignment.Top
@@ -822,17 +942,32 @@ local function card(parent, item, cardSize)
 	if item.currency == "R$" then
 		local promo = label(f, item.buttonTopText or "DIRECT PURCHASE", UDim2.new(1, -22, 0, 22), UDim2.fromOffset(11, 191), 11, C.Gold, Enum.TextXAlignment.Center, FONT_HEAVY)
 		create("UIStroke", {Color=C.Ink, Thickness=1.25, Transparency=0.05}, promo)
-		robuxBuyButton(f, item.price, UDim2.new(1, -22, 0, 56), UDim2.fromOffset(11, 216), function()
-			promptRobuxPurchase(item)
+		robuxBuyButton(f, item.price, UDim2.new(1, -22, 0, 56), UDim2.fromOffset(11, 216), function(buyButton)
+			promptRobuxPurchase(item, buyButton)
 		end)
-		local reward = label(f, item.rewardText or item.title, UDim2.new(1, -22, 0, 25), UDim2.fromOffset(11, 287), 11, C.Ink, Enum.TextXAlignment.Center, FONT_HEAVY)
+		local reward = label(f, item.rewardText or item.title, UDim2.new(1, -22, 0, 25), UDim2.fromOffset(11, 287), 11, C.White, Enum.TextXAlignment.Center, FONT_HEAVY)
 		create("UIStroke", {Color=C.White, Thickness=1.5, Transparency=0.05}, reward)
 	else
 		label(f, "S " .. tostring(item.price), UDim2.new(1, -22, 0, 27), UDim2.fromOffset(12, 197), 19, C.Gold, Enum.TextXAlignment.Left, FONT_HEAVY)
 		label(f, "SCRAP", UDim2.new(1, -22, 0, 16), UDim2.fromOffset(13, 220), 9, C.Muted, Enum.TextXAlignment.Left, FONT)
-		local buy = button(f, "BUY  S " .. tostring(item.price), UDim2.new(1, -22, 0, 38), UDim2.new(0, 11, 1, -49), C.Green, C.White)
+		local canAfford = CONFIG.CurrencyAmount >= item.price
+		local buyText = if canAfford then "BUY  S " .. tostring(item.price) else "INSUFFICIENT SCRAP"
+		local buy = button(
+			f,
+			buyText,
+			UDim2.new(1, -22, 0, 38),
+			UDim2.new(0, 11, 1, -49),
+			if canAfford then C.Green else C.Slate,
+			C.White
+		)
+		buy.Active = canAfford
+		buy.Selectable = canAfford
 		buy.MouseButton1Click:Connect(function()
-			ACTION("Buy supply", item)
+			if canAfford then
+				ACTION("Buy supply", item)
+			else
+				showToast("INSUFFICIENT SCRAP // Verzamel meer Scrap voor dit item.", C.Red)
+			end
 		end)
 	end
 	return f
@@ -840,6 +975,8 @@ end
 
 local render
 local activeScreen = nil
+local externalPanels = {}
+local panelChangedEvent = Instance.new("BindableEvent")
 
 local SCREEN_META = {
 	Shop = {title = "SURVIVOR SHOP", kicker = "PREMIUM // DIRECT PURCHASES", icon = "S", accent = C.Purple},
@@ -857,13 +994,46 @@ local function setHeader(which)
 	titleIcon.BackgroundColor3 = meta.accent
 end
 
+local function setActiveScreen(which)
+	if activeScreen == which then
+		return
+	end
+	activeScreen = which
+	panelChangedEvent:Fire(which, which ~= nil)
+end
+
+local function bindResponsiveGrid(list, layout, cellHeight, maximumColumns)
+	local horizontalGap = 18
+	local function updateGrid()
+		if not list.Parent or list.AbsoluteSize.X <= 0 then
+			return
+		end
+
+		local displayedWidth = list.AbsoluteSize.X
+		local columns = maximumColumns
+		if displayedWidth < 520 then
+			columns = 1
+		elseif displayedWidth < 900 then
+			columns = math.min(2, maximumColumns)
+		end
+
+		local logicalWidth = displayedWidth / math.max(scaler.Scale, 0.01)
+		local cellWidth = math.floor((logicalWidth - 6 - horizontalGap * (columns - 1)) / columns)
+		layout.FillDirectionMaxCells = columns
+		layout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+	end
+
+	list:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateGrid)
+	task.defer(updateGrid)
+end
+
 local function renderCardScreen(which, introTitle, introText, items)
 	clearContent()
 	local meta = SCREEN_META[which]
 
 	local hero = section(content, UDim2.new(1, 0, 0, 78), UDim2.fromOffset(0, 0), meta.accent)
 	gradient(hero, meta.accent:Lerp(C.White, 0.08), meta.accent:Lerp(C.Ink, 0.2), 0)
-	stroke(hero, C.Ink, 2.5)
+	stroke(hero, C.Border, 1, 0.12)
 	label(hero, introTitle, UDim2.new(1, -32, 0, 30), UDim2.fromOffset(18, 10), 18, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
 	local sub = label(hero, introText, UDim2.new(1, -32, 0, 28), UDim2.fromOffset(18, 40), 11, C.White, Enum.TextXAlignment.Left, FONT)
 	sub.TextTransparency = 0.08
@@ -873,7 +1043,7 @@ local function renderCardScreen(which, introTitle, introText, items)
 		Size = UDim2.new(1, 0, 1, -92),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 5,
+		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = meta.accent,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.fromOffset(0, 0),
@@ -885,8 +1055,12 @@ local function renderCardScreen(which, introTitle, introText, items)
 		FillDirectionMaxCells = 4,
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, list)
+	bindResponsiveGrid(list, layout, 320, 4)
 	for _, item in ipairs(items) do
 		card(list, item, UDim2.fromOffset(230, 320))
+	end
+	if #items == 0 then
+		stateCard(list, "NO ITEMS AVAILABLE", "New stock will appear here when it becomes available.", meta.accent)
 	end
 	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		list.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 10)
@@ -930,7 +1104,7 @@ local function renderOffer()
 	local timerLabel = label(timerBox, eligible and "--:--:--" or "NOT ELIGIBLE", UDim2.new(1, -20, 0, 38), UDim2.fromOffset(10, 28), eligible and 24 or 18, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
 
 	local pack = section(content, UDim2.new(0.65, -6, 0, 348), UDim2.fromOffset(0, 116), C.Paper)
-	label(pack, "STARTER RECOVERY PACK", UDim2.new(1, -32, 0, 30), UDim2.fromOffset(16, 13), 19, C.Ink, Enum.TextXAlignment.Left, FONT_HEAVY)
+	label(pack, "STARTER RECOVERY PACK", UDim2.new(1, -32, 0, 30), UDim2.fromOffset(16, 13), 19, C.White, Enum.TextXAlignment.Left, FONT_HEAVY)
 	label(pack, "A fixed bundle for your first expeditions — every reward is shown below.", UDim2.new(1, -32, 0, 22), UDim2.fromOffset(16, 43), 10, C.Muted, Enum.TextXAlignment.Left, FONT)
 	label(pack, "INCLUDED", UDim2.new(1, -32, 0, 20), UDim2.fromOffset(16, 76), 9, C.Orange, Enum.TextXAlignment.Left, FONT_HEAVY)
 
@@ -938,10 +1112,10 @@ local function renderOffer()
 		local tile = create("Frame", {
 			Position = UDim2.fromOffset(x, 101),
 			Size = UDim2.fromOffset(140, 174),
-			BackgroundColor3 = C.White,
+			BackgroundColor3 = C.Surface,
 			BorderSizePixel = 0,
 		}, pack)
-		stroke(tile, C.Ink, 2)
+		stroke(tile, C.Border, 1, 0.16)
 
 		if viewportItem then
 			itemViewport(tile, viewportItem, UDim2.fromOffset(104, 96), UDim2.fromOffset(18, 12))
@@ -959,7 +1133,7 @@ local function renderOffer()
 			stroke(coinTile, C.Ink, 1.5, 0.2)
 		end
 		chip(tile, amountText, tileColor or C.Orange, UDim2.fromOffset(48, 22), UDim2.new(1, -55, 0, 17))
-		local nm = label(tile, name, UDim2.new(1, -16, 0, 48), UDim2.fromOffset(8, 118), 10, C.Ink, Enum.TextXAlignment.Center, FONT_HEAVY)
+		local nm = label(tile, name, UDim2.new(1, -16, 0, 48), UDim2.fromOffset(8, 118), 10, C.White, Enum.TextXAlignment.Center, FONT_HEAVY)
 		nm.TextWrapped = true
 		return tile
 	end
@@ -969,11 +1143,11 @@ local function renderOffer()
 	offerItem(312, "REPAIR KITS", "x3", {name="Repair Kit", accent="Green"}, C.Green)
 	offerItem(460, "ARRIVAL NAMEPLATE", "x1", {name="Arrival Nameplate", accent="Purple"}, C.Purple)
 
-	local note = create("Frame", {Position=UDim2.fromOffset(16,289),Size=UDim2.new(1,-32,0,43),BackgroundColor3=Color3.fromRGB(236,240,245),BorderSizePixel=0}, pack)
+	local note = create("Frame", {Position=UDim2.fromOffset(16,289),Size=UDim2.new(1,-32,0,43),BackgroundColor3=C.Surface,BorderSizePixel=0}, pack)
 	label(note, "NEW PLAYER BONUS", UDim2.fromOffset(124,43), UDim2.fromOffset(10,0), 9, C.Orange, Enum.TextXAlignment.Left, FONT_HEAVY)
-	label(note, "Available only during your personal arrival window.", UDim2.new(1,-142,1,0), UDim2.fromOffset(136,0), 10, C.Ink, Enum.TextXAlignment.Left, FONT)
+	label(note, "Available only during your personal arrival window.", UDim2.new(1,-142,1,0), UDim2.fromOffset(136,0), 10, C.White, Enum.TextXAlignment.Left, FONT)
 
-	local deal = section(content, UDim2.new(0.35, -6, 0, 348), UDim2.new(0.65, 6, 0, 116), C.White)
+	local deal = section(content, UDim2.new(0.35, -6, 0, 348), UDim2.new(0.65, 6, 0, 116), C.Surface)
 	chip(deal, "SAVE " .. tostring(discount) .. "%", C.Red, UDim2.fromOffset(92, 27), UDim2.fromOffset(16, 16))
 	label(deal, "NEW PLAYER PRICE", UDim2.new(1, -32, 0, 22), UDim2.fromOffset(16, 54), 10, C.Muted, Enum.TextXAlignment.Left, FONT_HEAVY)
 	label(deal, "REGULAR  " .. tostring(cfg.OriginalPrice) .. " ROBUX", UDim2.new(1, -32, 0, 24), UDim2.fromOffset(16, 79), 11, C.Muted, Enum.TextXAlignment.Left, FONT)
@@ -981,16 +1155,16 @@ local function renderOffer()
 	robuxPrice(deal, cfg.Price, UDim2.new(1, -32, 0, 32), UDim2.fromOffset(16, 111), C.Green)
 	label(deal, "YOU SAVE " .. tostring(saved) .. " ROBUX", UDim2.new(1, -32, 0, 22), UDim2.fromOffset(16, 145), 10, C.Green, Enum.TextXAlignment.Left, FONT_HEAVY)
 
-	local rule = create("Frame", {Position=UDim2.fromOffset(16,181),Size=UDim2.new(1,-32,0,76),BackgroundColor3=Color3.fromRGB(255,239,216),BorderSizePixel=0}, deal)
-	stroke(rule, C.Orange, 2)
+	local rule = create("Frame", {Position=UDim2.fromOffset(16,181),Size=UDim2.new(1,-32,0,76),BackgroundColor3=C.Paper,BorderSizePixel=0}, deal)
+	stroke(rule, C.Orange, 1, 0.18)
 	label(rule, "NEW SURVIVORS ONLY", UDim2.new(1,-20,0,24), UDim2.fromOffset(10,7), 10, C.Orange, Enum.TextXAlignment.Left, FONT_HEAVY)
 	local ruleText = eligible and "Your personal offer window is active." or "This offer is not active for this player."
-	local ruleLabel = label(rule, ruleText, UDim2.new(1,-20,0,34), UDim2.fromOffset(10,31), 10, C.Ink, Enum.TextXAlignment.Left, FONT)
+	local ruleLabel = label(rule, ruleText, UDim2.new(1,-20,0,34), UDim2.fromOffset(10,31), 10, C.White, Enum.TextXAlignment.Left, FONT)
 	ruleLabel.TextWrapped = true
 
 	local buy
 	if eligible then
-		buy = robuxBuyButton(deal, cfg.Price, UDim2.new(1, -32, 0, 56), UDim2.new(0, 16, 1, -72), function()
+		buy = robuxBuyButton(deal, cfg.Price, UDim2.new(1, -32, 0, 56), UDim2.new(0, 16, 1, -72), function(buyButton)
 			if os.time() >= offerEndsAt then
 				showToast("OFFER EXPIRED // Deze new-player deal is afgelopen.", C.Red)
 				return
@@ -999,7 +1173,7 @@ local function renderOffer()
 				title = "New Survivor Deal",
 				purchaseType = cfg.PurchaseType,
 				purchaseId = cfg.PurchaseId,
-			})
+			}, buyButton)
 		end)
 	else
 		buy = button(deal, "OFFER NOT AVAILABLE", UDim2.new(1, -32, 0, 56), UDim2.new(0, 16, 1, -72), C.Slate, C.White)
@@ -1045,17 +1219,17 @@ local function renderMarketplace()
 	local x = 0
 	for i, tabName in ipairs(tabNames) do
 		local w = i == 1 and 70 or 118
-		local tb = button(tabs, tabName, UDim2.fromOffset(w, 34), UDim2.fromOffset(x, 0), i == 1 and C.Cyan or C.White, i == 1 and C.White or C.Ink)
+		local tb = button(tabs, tabName, UDim2.fromOffset(w, 34), UDim2.fromOffset(x, 0), i == 1 and C.Cyan or C.Surface, C.White)
 		tb.TextSize = 11
 		tabButtons[tabName] = tb
 		tb.MouseButton1Click:Connect(function()
 			selectedMarketCategory = tabName
 			for name, other in pairs(tabButtons) do
 				local selected = name == selectedMarketCategory
-				local base = selected and C.Cyan or C.White
+				local base = selected and C.Cyan or C.Surface
 				other.BackgroundColor3 = base
 				other:SetAttribute("BaseColor", base)
-				other.TextColor3 = selected and C.White or C.Ink
+				other.TextColor3 = C.White
 			end
 			if applyMarketFilters then applyMarketFilters() end
 		end)
@@ -1064,16 +1238,17 @@ local function renderMarketplace()
 
 	local list = create("ScrollingFrame", {
 		Position=UDim2.fromOffset(0,166), Size=UDim2.new(1,0,1,-166), BackgroundTransparency=1, BorderSizePixel=0,
-		ScrollBarThickness=5, ScrollBarImageColor3=C.Cyan, AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.fromOffset(0,0)
+		ScrollBarThickness=3, ScrollBarImageColor3=C.Cyan, AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.fromOffset(0,0)
 	}, content)
 	pad(list, 3, 3, 3, 8)
 	local layout = create("UIGridLayout", {CellSize=UDim2.fromOffset(230,150),CellPadding=UDim2.fromOffset(18,14),FillDirectionMaxCells=4}, list)
+	bindResponsiveGrid(list, layout, 150, 4)
 
 	local function addListing(item)
 		local accent = C[item.accent] or C.Cyan
-		local f = section(list, UDim2.fromOffset(230,150), nil, C.White)
+		local f = section(list, UDim2.fromOffset(230,150), nil, C.Surface)
 		itemViewport(f, item, UDim2.fromOffset(54,54), UDim2.fromOffset(12,12))
-		label(f,item.title,UDim2.new(1,-82,0,22),UDim2.fromOffset(76,12),14,C.Ink,Enum.TextXAlignment.Left,FONT_HEAVY)
+		label(f,item.title,UDim2.new(1,-82,0,22),UDim2.fromOffset(76,12),14,C.White,Enum.TextXAlignment.Left,FONT_HEAVY)
 		label(f,"by "..item.seller,UDim2.new(1,-82,0,18),UDim2.fromOffset(76,35),9,C.Muted,Enum.TextXAlignment.Left,FONT)
 		label(f,"S "..item.price,UDim2.fromOffset(92,28),UDim2.fromOffset(12,77),17,C.Gold,Enum.TextXAlignment.Left,FONT_HEAVY)
 		local buy = button(f,"VIEW",UDim2.fromOffset(92,34),UDim2.new(1,-104,1,-46),accent,C.White)
@@ -1085,17 +1260,31 @@ local function renderMarketplace()
 	for _, item in ipairs(DATA.Market) do
 		cards[#cards+1] = {frame = addListing(item), data = item}
 	end
+	local emptyListings = stateCard(
+		list,
+		"NO LISTINGS FOUND",
+		"Try another category or clear your search.",
+		C.Cyan
+	)
+	emptyListings.LayoutOrder = 999
+	emptyListings.Visible = false
 
 	applyMarketFilters = function()
 		local q = string.lower(search.Text)
+		local visibleCount = 0
 		for _, entry in ipairs(cards) do
 			local categoryOK = selectedMarketCategory == "ALL" or string.upper(entry.data.category or "") == selectedMarketCategory
 			local textOK = q == "" or string.find(string.lower(entry.data.title .. " " .. entry.data.seller .. " " .. (entry.data.category or "")), q, 1, true) ~= nil
 			entry.frame.Visible = categoryOK and textOK
+			if entry.frame.Visible then
+				visibleCount += 1
+			end
 		end
+		emptyListings.Visible = visibleCount == 0
 	end
 	search:GetPropertyChangedSignal("Text"):Connect(applyMarketFilters)
 	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() list.CanvasSize=UDim2.fromOffset(0,layout.AbsoluteContentSize.Y+10) end)
+	applyMarketFilters()
 end
 
 local function renderInventory()
@@ -1106,7 +1295,7 @@ local function renderInventory()
 	local categories = {"All", "Raw", "Components", "Supplies", "Equipment", "Special"}
 	local categoryButtons = {}
 	for i, cat in ipairs(categories) do
-		local b = button(sidebar, string.upper(cat), UDim2.new(1,-20,0,40), UDim2.fromOffset(10,43+(i-1)*48), i==1 and C.Purple or C.White, i==1 and C.White or C.Ink)
+		local b = button(sidebar, string.upper(cat), UDim2.new(1,-20,0,40), UDim2.fromOffset(10,43+(i-1)*48), i==1 and C.Purple or C.Surface, C.White)
 		b.TextSize = 11
 		categoryButtons[cat] = b
 	end
@@ -1115,14 +1304,14 @@ local function renderInventory()
 	local search = searchBox(content, "Search backpack...", UDim2.fromOffset(rightX, 0), UDim2.new(1, -rightX, 0, 42))
 	local list = create("ScrollingFrame", {
 		Position=UDim2.fromOffset(rightX,54), Size=UDim2.new(1,-rightX-250,1,-54), BackgroundTransparency=1, BorderSizePixel=0,
-		ScrollBarThickness=5, ScrollBarImageColor3=C.Purple, AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.fromOffset(0,0)
+		ScrollBarThickness=3, ScrollBarImageColor3=C.Purple, AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.fromOffset(0,0)
 	}, content)
 	pad(list, 3, 3, 3, 6)
 	local layout = create("UIGridLayout", {CellSize=UDim2.fromOffset(154,112),CellPadding=UDim2.fromOffset(12,12),FillDirectionMaxCells=3}, list)
 
-	local detail = section(content, UDim2.fromOffset(232, 410), UDim2.new(1,-232,0,54), C.White)
+	local detail = section(content, UDim2.fromOffset(232, 410), UDim2.new(1,-232,0,54), C.Surface)
 	local dIconHolder = create("Frame", {Size=UDim2.fromOffset(72,72),Position=UDim2.fromOffset(16,16),BackgroundTransparency=1}, detail)
-	local dName = label(detail,"SELECT ITEM",UDim2.new(1,-32,0,27),UDim2.fromOffset(16,102),16,C.Ink,Enum.TextXAlignment.Left,FONT_HEAVY)
+	local dName = label(detail,"SELECT ITEM",UDim2.new(1,-32,0,27),UDim2.fromOffset(16,102),16,C.White,Enum.TextXAlignment.Left,FONT_HEAVY)
 	local dRarity = label(detail,"BACKPACK DETAILS",UDim2.new(1,-32,0,20),UDim2.fromOffset(16,129),9,C.Muted,Enum.TextXAlignment.Left,FONT)
 	local dBiome = label(detail,"SOURCE // --",UDim2.new(1,-32,0,18),UDim2.fromOffset(16,149),9,C.Cyan,Enum.TextXAlignment.Left,FONT_HEAVY)
 	local dUse = label(detail,"Select an item to inspect carried and stored amounts.",UDim2.new(1,-32,0,48),UDim2.fromOffset(16,174),11,C.Muted,Enum.TextXAlignment.Left,FONT)
@@ -1130,7 +1319,7 @@ local function renderInventory()
 	dUse.TextYAlignment = Enum.TextYAlignment.Top
 	local amountBox = create("Frame", {Position=UDim2.fromOffset(16,230),Size=UDim2.new(1,-32,0,70),BackgroundColor3=C.Canvas,BorderSizePixel=0}, detail)
 	round(amountBox, 10)
-	local dCarried = label(amountBox,"CARRIED  --",UDim2.new(1,-16,0,30),UDim2.fromOffset(8,5),11,C.Ink,Enum.TextXAlignment.Left,FONT_HEAVY)
+	local dCarried = label(amountBox,"CARRIED  --",UDim2.new(1,-16,0,30),UDim2.fromOffset(8,5),11,C.White,Enum.TextXAlignment.Left,FONT_HEAVY)
 	local dStored = label(amountBox,"STORED   --",UDim2.new(1,-16,0,28),UDim2.fromOffset(8,35),11,C.Muted,Enum.TextXAlignment.Left,FONT)
 	local lock = button(detail,"LOCK / RESERVE",UDim2.new(1,-32,0,42),UDim2.new(0,16,1,-58),C.Ink2,C.White)
 	lock.MouseButton1Click:Connect(function() ACTION("Open resource controls") end)
@@ -1153,13 +1342,13 @@ local function renderInventory()
 
 	local function addItem(item)
 		local accent = C[item.accent] or C.Purple
-		local f = create("TextButton", {AutoButtonColor=false,Size=UDim2.fromOffset(154,112),BackgroundColor3=C.White,Text="",BorderSizePixel=0}, list)
+		local f = create("TextButton", {AutoButtonColor=false,Size=UDim2.fromOffset(154,112),BackgroundColor3=C.Surface,Text="",BorderSizePixel=0}, list)
 		round(f, 12)
-		stroke(f, C.Ink, 2)
+		stroke(f, C.Border, 1, 0.16)
 		itemViewport(f, item, UDim2.fromOffset(56,56), UDim2.fromOffset(9,9))
-		label(f,"x"..item.amount,UDim2.fromOffset(72,24),UDim2.fromOffset(72,12),15,C.Ink,Enum.TextXAlignment.Right,FONT_HEAVY)
+		label(f,"x"..item.amount,UDim2.fromOffset(72,24),UDim2.fromOffset(72,12),15,C.White,Enum.TextXAlignment.Right,FONT_HEAVY)
 		label(f,item.rarity,UDim2.fromOffset(72,18),UDim2.fromOffset(72,38),8,accent,Enum.TextXAlignment.Right,FONT_HEAVY)
-		local nm = label(f,string.upper(item.name),UDim2.new(1,-18,0,32),UDim2.fromOffset(9,73),10,C.Ink,Enum.TextXAlignment.Left,FONT_HEAVY)
+		local nm = label(f,string.upper(item.name),UDim2.new(1,-18,0,32),UDim2.fromOffset(9,73),10,C.White,Enum.TextXAlignment.Left,FONT_HEAVY)
 		nm.TextWrapped = true
 		f.MouseButton1Click:Connect(function() selectItem(item) end)
 		entries[#entries+1] = {frame=f,data=item}
@@ -1167,15 +1356,28 @@ local function renderInventory()
 
 	for _, item in ipairs(DATA.Inventory) do addItem(item) end
 	if DATA.Inventory[1] then selectItem(DATA.Inventory[1]) end
+	local emptyInventory = stateCard(
+		list,
+		"NO ITEMS FOUND",
+		"Try another category or clear your search.",
+		C.Purple
+	)
+	emptyInventory.LayoutOrder = 999
+	emptyInventory.Visible = false
 
 	local function filter()
 		local q = string.lower(search.Text)
+		local visibleCount = 0
 		for _, entry in ipairs(entries) do
 			local item = entry.data
 			local categoryOK = selectedCategory == "All" or item.category == selectedCategory
 			local textOK = q == "" or string.find(string.lower(item.name .. " " .. item.category .. " " .. item.rarity .. " " .. (item.biome or "")), q, 1, true) ~= nil
 			entry.frame.Visible = categoryOK and textOK
+			if entry.frame.Visible then
+				visibleCount += 1
+			end
 		end
+		emptyInventory.Visible = visibleCount == 0
 	end
 
 	for cat, b in pairs(categoryButtons) do
@@ -1183,21 +1385,22 @@ local function renderInventory()
 			selectedCategory = cat
 			for otherCat, other in pairs(categoryButtons) do
 				local selected = otherCat == cat
-				local base = selected and C.Purple or C.White
+				local base = selected and C.Purple or C.Surface
 				other.BackgroundColor3 = base
 				other:SetAttribute("BaseColor", base)
-				other.TextColor3 = selected and C.White or C.Ink
+				other.TextColor3 = C.White
 			end
 			filter()
 		end)
 	end
 	search:GetPropertyChangedSignal("Text"):Connect(filter)
 	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() list.CanvasSize=UDim2.fromOffset(0,layout.AbsoluteContentSize.Y+10) end)
+	filter()
 end
 
 render = function(which)
 	if not SCREEN_META[which] then return end
-	activeScreen = which
+	setActiveScreen(which)
 	setHeader(which)
 
 	if which == "Shop" then
@@ -1213,115 +1416,436 @@ render = function(which)
 	end
 end
 
-local function open(which)
-	if not SCREEN_META[which] then
+local inputLocked = false
+local playerControls = nil
+local controlsDisabledByMenu = false
+local promptsWereEnabled = true
+player:SetAttribute("EclipseMenuOpen", false)
+
+task.spawn(function()
+	local playerScripts = player:WaitForChild("PlayerScripts")
+	local playerModuleScript = playerScripts:WaitForChild("PlayerModule")
+	local ok, playerModule = pcall(require, playerModuleScript)
+	if ok and playerModule and type(playerModule.GetControls) == "function" then
+		playerControls = playerModule:GetControls()
+		if inputLocked then
+			playerControls:Disable()
+			controlsDisabledByMenu = true
+		end
+	end
+end)
+
+local function setInputLocked(locked)
+	if inputLocked == locked then
+		return
+	end
+	inputLocked = locked
+	player:SetAttribute("EclipseMenuOpen", locked)
+
+	if locked then
+		if playerControls and not controlsDisabledByMenu then
+			playerControls:Disable()
+			controlsDisabledByMenu = true
+		end
+		local promptReadOK, promptEnabled = pcall(function()
+			return ProximityPromptService.Enabled
+		end)
+		if promptReadOK then
+			promptsWereEnabled = promptEnabled
+			pcall(function()
+				ProximityPromptService.Enabled = false
+			end)
+		end
+	else
+		if controlsDisabledByMenu and playerControls then
+			playerControls:Enable()
+			controlsDisabledByMenu = false
+		end
+		pcall(function()
+			ProximityPromptService.Enabled = promptsWereEnabled
+		end)
+	end
+end
+
+local function focusInternalWindow()
+	if not UserInputService.GamepadEnabled then
+		return
+	end
+	task.defer(function()
+		if dim.Visible and close.Visible then
+			GuiService.SelectedObject = close
+		end
+	end)
+end
+
+local desiredScreen = nil
+local transitionToken = 0
+local activeWindowTween = nil
+local activeScaleTween = nil
+local activeContentTween = nil
+local activeBackdropTween = nil
+local panelTransitioning = false
+
+local function playWindowTween(tweenInfo, properties)
+	if activeWindowTween then
+		activeWindowTween:Cancel()
+	end
+	activeWindowTween = TweenService:Create(window, tweenInfo, properties)
+	activeWindowTween:Play()
+	return activeWindowTween
+end
+
+local function playScaleTween(tweenInfo, scale)
+	if activeScaleTween then
+		activeScaleTween:Cancel()
+	end
+	activeScaleTween = TweenService:Create(scaler, tweenInfo, {Scale = scale})
+	activeScaleTween:Play()
+	return activeScaleTween
+end
+
+local function playContentTween(tweenInfo, transparency)
+	if activeContentTween then
+		activeContentTween:Cancel()
+	end
+	activeContentTween = TweenService:Create(
+		contentMotionGroup,
+		tweenInfo,
+		{GroupTransparency = transparency}
+	)
+	activeContentTween:Play()
+	return activeContentTween
+end
+
+local function playBackdropTween(tweenInfo, transparency)
+	if activeBackdropTween then
+		activeBackdropTween:Cancel()
+	end
+	activeBackdropTween = TweenService:Create(
+		dim,
+		tweenInfo,
+		{BackgroundTransparency = transparency}
+	)
+	activeBackdropTween:Play()
+	return activeBackdropTween
+end
+
+local function cancelPanelTweens()
+	if activeWindowTween then
+		activeWindowTween:Cancel()
+		activeWindowTween = nil
+	end
+	if activeScaleTween then
+		activeScaleTween:Cancel()
+		activeScaleTween = nil
+	end
+	if activeContentTween then
+		activeContentTween:Cancel()
+		activeContentTween = nil
+	end
+	if activeBackdropTween then
+		activeBackdropTween:Cancel()
+		activeBackdropTween = nil
+	end
+end
+
+local function showInternalPanel(which, token)
+	if token ~= transitionToken or desiredScreen ~= which then
+		return
+	end
+
+	render(which)
+	dim.Visible = true
+	dim.BackgroundTransparency = 1
+	window.Visible = true
+	focusInternalWindow()
+	window.Position = UDim2.new(0.5, 0, windowYScale, 10)
+	window.GroupTransparency = 0
+	contentMotionGroup.GroupTransparency = 0.24
+	scaler.Scale = baseWindowScale * 0.98
+	playBackdropTween(
+		TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		0.45
+	)
+
+	local openingTween = playWindowTween(
+		TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Position = UDim2.fromScale(0.5, windowYScale),
+		}
+	)
+	playScaleTween(
+		TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		baseWindowScale
+	)
+	task.delay(0.03, function()
+		if token == transitionToken and desiredScreen == which then
+			playContentTween(
+				TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				0
+			)
+		end
+	end)
+	task.spawn(function()
+		openingTween.Completed:Wait()
+		if token == transitionToken then
+			panelTransitioning = false
+		end
+	end)
+end
+
+local function openPanel(which)
+	if not SCREEN_META[which] and not externalPanels[which] then
 		warn("[Eclipse UI] Unknown screen: " .. tostring(which))
 		return
 	end
-	render(which)
-	dim.Visible = true
-	window.Position = UDim2.new(0.5, 0, 0.5, 18)
-	window.BackgroundTransparency = 0.12
-	TweenService:Create(window, TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Position = UDim2.fromScale(0.5, 0.5),
-		BackgroundTransparency = 0,
-	}):Play()
-end
 
-local function closeUI()
-	if not dim.Visible then return end
-	local tw = TweenService:Create(window, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-		Position = UDim2.new(0.5, 0, 0.5, 12),
-		BackgroundTransparency = 0.08,
-	})
-	tw:Play()
-	tw.Completed:Wait()
-	dim.Visible = false
-end
-
-close.MouseButton1Click:Connect(closeUI)
-
--- Demo dock. Keep this while styling; hide it once your own HUD buttons call _G.EclipseUI.Open(...).
-local dock = create("Frame", {
-	Name = "DemoDock",
-	AnchorPoint = Vector2.new(0.5, 1),
-	Position = UDim2.new(0.5, 0, 1, -14),
-	Size = UDim2.fromOffset(710, 72),
-	BackgroundColor3 = C.Ink,
-	BorderSizePixel = 0,
-	Visible = CONFIG.ShowDemoDock,
-}, gui)
-round(dock, 18)
-stroke(dock, C.White, 2, 0.15)
-create("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	HorizontalAlignment = Enum.HorizontalAlignment.Center,
-	VerticalAlignment = Enum.VerticalAlignment.Center,
-	Padding = UDim.new(0, 8),
-}, dock)
-pad(dock, 10, 10, 8, 8)
-
-local dockButtons = {
-	{"SHOP", "Shop", C.Purple},
-	{"OFFER", "Offer", C.Orange},
-	{"MARKET", "Marketplace", C.Cyan},
-	{"SUPPLY", "Supply", C.Green},
-	{"BACKPACK", "Inventory", C.Gold},
-}
-for _, info in ipairs(dockButtons) do
-	local b = button(dock, info[1], UDim2.fromOffset(128, 52), nil, info[3], C.White)
-	b.MouseButton1Click:Connect(function() open(info[2]) end)
-	if info[2] == "Offer" and not RunService:IsStudio() then
-		local function updateOfferVisibility()
-			local endsAt = player:GetAttribute(CONFIG.StarterOffer.OfferEndsAtAttribute)
-			b.Visible = type(endsAt) == "number" and endsAt > os.time()
-		end
-		updateOfferVisibility()
-		player:GetAttributeChangedSignal(CONFIG.StarterOffer.OfferEndsAtAttribute):Connect(updateOfferVisibility)
+	if desiredScreen == which and activeScreen == which then
+		return
 	end
-end
 
--- Optional convenience: connect common existing HUD button names to the new screens.
--- This does not delete or rewrite any of your old GUI objects.
-local aliases = {
-	Shop = {ShopButton=true, PremiumShopButton=true},
-	Offer = {SurvivorOfferButton=true, OfferButton=true, NewSurvivorOfferButton=true},
-	Marketplace = {MarketplaceButton=true, MarketButton=true},
-	Supply = {SupplyShopButton=true, SuppliesButton=true},
-	Inventory = {InventoryButton=true, BackpackButton=true},
-}
+	desiredScreen = which
+	setInputLocked(true)
+	transitionToken += 1
+	local token = transitionToken
+	panelTransitioning = true
+	cancelPanelTweens()
 
-if CONFIG.AutoConnectExistingButtons then
-	for _, descendant in ipairs(playerGui:GetDescendants()) do
-		if descendant:IsA("GuiButton") and not descendant:IsDescendantOf(gui) then
-			for screenName, names in pairs(aliases) do
-				if names[descendant.Name] then
-					descendant.MouseButton1Click:Connect(function()
-						open(screenName)
-					end)
+	local externalPanel = externalPanels[which]
+	if externalPanel then
+		task.spawn(function()
+			if dim.Visible then
+				playContentTween(
+					TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					1
+				)
+				local outgoingTween = playWindowTween(
+					TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					{
+						Position = UDim2.new(0.5, 0, windowYScale, -10),
+					}
+				)
+				playScaleTween(
+					TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					baseWindowScale * 0.98
+				)
+				outgoingTween.Completed:Wait()
+				if token ~= transitionToken or desiredScreen ~= which then
+					return
+				end
+				window.Visible = false
+				dim.Visible = false
+			elseif activeScreen and externalPanels[activeScreen] then
+				externalPanels[activeScreen].Close()
+				task.wait(0.1)
+				if token ~= transitionToken or desiredScreen ~= which then
+					return
 				end
 			end
+
+			externalPanel.Open()
+			setActiveScreen(which)
+			if type(externalPanel.Focus) == "function" then
+				externalPanel.Focus()
+			end
+			panelTransitioning = false
+		end)
+		return
+	end
+
+	if activeScreen and externalPanels[activeScreen] then
+		externalPanels[activeScreen].Close()
+		task.delay(0.1, function()
+			showInternalPanel(which, token)
+		end)
+		return
+	end
+
+	if not dim.Visible then
+		showInternalPanel(which, token)
+		return
+	end
+
+	if activeScreen == which then
+		window.Visible = true
+		local restoreTween = playWindowTween(
+			TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = UDim2.fromScale(0.5, windowYScale),
+			}
+		)
+		playContentTween(
+			TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			0
+		)
+		playScaleTween(
+			TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			baseWindowScale
+		)
+		task.spawn(function()
+			restoreTween.Completed:Wait()
+			if token == transitionToken then
+				panelTransitioning = false
+			end
+		end)
+		return
+	end
+
+	task.spawn(function()
+		playContentTween(
+			TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			1
+		)
+		local outgoingTween = playWindowTween(
+			TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{
+				Position = UDim2.new(0.5, 0, windowYScale, -8),
+			}
+		)
+		playScaleTween(
+			TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			baseWindowScale * 0.98
+		)
+		outgoingTween.Completed:Wait()
+		if token ~= transitionToken or desiredScreen ~= which then
+			return
+		end
+
+		render(which)
+		focusInternalWindow()
+		window.Visible = true
+		window.Position = UDim2.new(0.5, 0, windowYScale, 10)
+		window.GroupTransparency = 0
+		contentMotionGroup.GroupTransparency = 0.24
+		scaler.Scale = baseWindowScale * 0.98
+
+		local incomingTween = playWindowTween(
+			TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = UDim2.fromScale(0.5, windowYScale),
+			}
+		)
+		playContentTween(
+			TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			0
+		)
+		playScaleTween(
+			TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			baseWindowScale
+		)
+		incomingTween.Completed:Wait()
+		if token == transitionToken then
+			panelTransitioning = false
+		end
+	end)
+end
+
+local function closeCurrentPanel()
+	if not activeScreen and not dim.Visible then return end
+
+	desiredScreen = nil
+	transitionToken += 1
+	local token = transitionToken
+	panelTransitioning = true
+	cancelPanelTweens()
+
+	if activeScreen and externalPanels[activeScreen] then
+		externalPanels[activeScreen].Close()
+		task.delay(0.15, function()
+			if token == transitionToken and desiredScreen == nil then
+				setActiveScreen(nil)
+				setInputLocked(false)
+				panelTransitioning = false
+			end
+		end)
+		return
+	end
+
+	playContentTween(
+		TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		1
+	)
+	local closingTween = playWindowTween(
+		TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			Position = UDim2.new(0.5, 0, windowYScale, 12),
+		}
+	)
+	playScaleTween(
+		TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		baseWindowScale * 0.98
+	)
+	task.spawn(function()
+		closingTween.Completed:Wait()
+		if token == transitionToken and desiredScreen == nil then
+			window.Visible = false
+			local backdropTween = playBackdropTween(
+				TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				1
+			)
+			backdropTween.Completed:Wait()
+		end
+		if token == transitionToken and desiredScreen == nil then
+			dim.Visible = false
+			setActiveScreen(nil)
+			setInputLocked(false)
+			panelTransitioning = false
+		end
+	end)
+end
+
+local function registerPanel(name, adapter)
+	if SCREEN_META[name] then
+		warn("[Eclipse UI] Cannot replace built-in screen: " .. tostring(name))
+		return function() end
+	end
+	if type(adapter) ~= "table" or type(adapter.Open) ~= "function" or type(adapter.Close) ~= "function" then
+		warn("[Eclipse UI] External panel adapter needs Open and Close functions: " .. tostring(name))
+		return function() end
+	end
+
+	externalPanels[name] = adapter
+	return function()
+		if externalPanels[name] == adapter then
+			externalPanels[name] = nil
 		end
 	end
 end
 
+local function togglePanel(which)
+	if desiredScreen == which or activeScreen == which then
+		closeCurrentPanel()
+	else
+		openPanel(which)
+	end
+end
+
+close.MouseButton1Click:Connect(closeCurrentPanel)
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	local isBackInput = input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB
+	if isBackInput and (dim.Visible or activeScreen ~= nil) then
+		closeCurrentPanel()
+		return
+	end
 	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.Escape and dim.Visible then
-		closeUI()
+	if not UserInputService:GetFocusedTextBox()
+		and (input.KeyCode == Enum.KeyCode.B or input.KeyCode == Enum.KeyCode.I)
+	then
+		togglePanel("Inventory")
 	end
 end)
 
 _G.EclipseUI = {
-	Open = open,
-	Close = closeUI,
-	Render = render,
+	Open = openPanel,
+	OpenPanel = openPanel,
+	TogglePanel = togglePanel,
+	Close = closeCurrentPanel,
+	CloseCurrentPanel = closeCurrentPanel,
+	Render = openPanel,
+	RegisterPanel = registerPanel,
 	Screen = gui,
 	GetActiveScreen = function() return activeScreen end,
+	IsTransitioning = function() return panelTransitioning end,
+	PanelChanged = panelChangedEvent.Event,
 }
-
-if CONFIG.OpenOnStart and SCREEN_META[CONFIG.OpenOnStart] then
-	task.defer(function()
-		open(CONFIG.OpenOnStart)
-	end)
-end

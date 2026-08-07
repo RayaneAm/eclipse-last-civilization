@@ -121,7 +121,7 @@ function SupplyShopController:_buildPanel()
 	backdrop.Name = "Backdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.5
+	backdrop.BackgroundTransparency = 1
 	backdrop.GroupTransparency = 1
 	backdrop.Visible = false
 	backdrop.Parent = screenGui
@@ -141,7 +141,7 @@ function SupplyShopController:_buildPanel()
 	local panel = GlassPanel.new({
 		Name = "Panel",
 		Size = UDim2.new(0.7, 0, 0.75, 0),
-		Position = UDim2.fromScale(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.46),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Parent = backdrop,
 	})

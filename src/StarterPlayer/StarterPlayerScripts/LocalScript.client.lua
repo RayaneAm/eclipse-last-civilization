@@ -6,6 +6,8 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -17,7 +19,7 @@ end
 
 local Theme = {
 	Colors = {
-		Backdrop = Color3.fromRGB(4, 5, 10),
+		Backdrop = Color3.fromRGB(38, 39, 44),
 		Panel = Color3.fromRGB(10, 10, 17),
 		PanelSoft = Color3.fromRGB(18, 16, 27),
 		Card = Color3.fromRGB(30, 27, 42),
@@ -162,7 +164,7 @@ local gui = new("ScreenGui", {
 	ResetOnSpawn = false,
 	IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = 50,
+	DisplayOrder = 85,
 })
 
 local backdrop = new("TextButton", {
@@ -170,10 +172,12 @@ local backdrop = new("TextButton", {
 	Parent = gui,
 	Size = UDim2.fromScale(1, 1),
 	BackgroundColor3 = Theme.Colors.Backdrop,
-	BackgroundTransparency = 0.38,
+	BackgroundTransparency = 0.45,
 	BorderSizePixel = 0,
 	Text = "",
 	AutoButtonColor = false,
+	Active = true,
+	Modal = true,
 	Visible = false,
 	ZIndex = 1,
 })
@@ -182,7 +186,7 @@ local windowShadow = new("Frame", {
 	Name = "WindowShadow",
 	Parent = backdrop,
 	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.new(0.5, 7, 0.5, 9),
+	Position = UDim2.new(0.5, 7, 0.46, 9),
 	Size = UDim2.new(0.82, 0, 0.78, 0),
 	BackgroundColor3 = Color3.new(0, 0, 0),
 	BackgroundTransparency = 0.45,
@@ -201,12 +205,13 @@ local window = new("Frame", {
 	Name = "Window",
 	Parent = backdrop,
 	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.46),
 	Size = UDim2.new(0.82, 0, 0.78, 0),
 	BackgroundColor3 = Theme.Colors.Panel,
 	BackgroundTransparency = 0.08,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
+	SelectionGroup = true,
 	ZIndex = 3,
 })
 corner(window, 20)
@@ -228,15 +233,42 @@ new("UISizeConstraint", {
 	MaxSize = Vector2.new(650, 600),
 })
 
-local windowScale = new("UIScale", {
+local windowScale
+local shadowScale
+local settingsBaseScale = 1
+
+local function updateWindowPosition()
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local viewport = camera.ViewportSize
+	local yScale = if viewport.Y < 760 then 0.52 else 0.46
+	settingsBaseScale = math.clamp(math.min(viewport.X / 720, (viewport.Y - 48) / 650), 0.65, 1)
+	window.Position = UDim2.fromScale(0.5, yScale)
+	windowShadow.Position = UDim2.new(0.5, 7, yScale, 9)
+	if windowScale and shadowScale then
+		windowScale.Scale = settingsBaseScale
+		shadowScale.Scale = settingsBaseScale
+	end
+end
+
+updateWindowPosition()
+if Workspace.CurrentCamera then
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateWindowPosition)
+end
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateWindowPosition)
+
+windowScale = new("UIScale", {
 	Parent = window,
 	Scale = 1,
 })
 
-local shadowScale = new("UIScale", {
+shadowScale = new("UIScale", {
 	Parent = windowShadow,
 	Scale = 1,
 })
+updateWindowPosition()
 
 local topDecor = new("Frame", {
 	Name = "TopDecor",
@@ -302,15 +334,15 @@ makeText({
 	ZIndex = 5,
 })
 
--- Gloeiende close button zoals in de screenshots.
+-- Compact close control: quiet by default, red only as a hover/close cue.
 local closeGlow = new("Frame", {
 	Name = "CloseGlow",
 	Parent = header,
 	AnchorPoint = Vector2.new(1, 0),
 	Position = UDim2.new(1, 0, 0, 0),
-	Size = UDim2.fromOffset(58, 58),
-	BackgroundColor3 = Theme.Colors.Cyan,
-	BackgroundTransparency = 0.78,
+	Size = UDim2.fromOffset(44, 44),
+	BackgroundColor3 = Theme.Colors.PanelSoft,
+	BackgroundTransparency = 0,
 	BorderSizePixel = 0,
 	ZIndex = 5,
 })
@@ -321,8 +353,8 @@ local closeOuter = new("Frame", {
 	Parent = closeGlow,
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(50, 50),
-	BackgroundColor3 = Theme.Colors.White,
+	Size = UDim2.fromOffset(42, 42),
+	BackgroundColor3 = Theme.Colors.PanelSoft,
 	BorderSizePixel = 0,
 	ZIndex = 6,
 })
@@ -333,8 +365,8 @@ local closeBorder = new("Frame", {
 	Parent = closeOuter,
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.new(1, -7, 1, -7),
-	BackgroundColor3 = Theme.Colors.Cyan,
+	Size = UDim2.new(1, -2, 1, -2),
+	BackgroundColor3 = Theme.Colors.Red,
 	BorderSizePixel = 0,
 	ZIndex = 7,
 })
@@ -346,9 +378,9 @@ local closeButton = makeText({
 	Parent = closeBorder,
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.new(1, -6, 1, -6),
+	Size = UDim2.new(1, -2, 1, -2),
 	BackgroundTransparency = 0,
-	Text = "×",
+	Text = "X",
 	TextColor3 = Theme.Colors.Red,
 	TextSize = 27,
 	Font = Theme.Fonts.Body,
@@ -963,22 +995,39 @@ local openButton = makeText({
 	Name = "OpenSettings",
 	Parent = gui,
 	AnchorPoint = Vector2.new(0, 1),
-	Position = UDim2.new(0, 18, 1, -18),
-	Size = UDim2.fromOffset(132, 42),
-	BackgroundTransparency = 0,
-	Text = "⚙  SETTINGS",
+	Position = UDim2.new(0, 16, 1, -16),
+	Size = UDim2.fromOffset(48, 48),
+	BackgroundTransparency = 0.14,
+	Text = "⚙",
 	TextColor3 = Theme.Colors.White,
-	TextSize = 12,
+	TextSize = 20,
 	Font = Theme.Fonts.Button,
 	TextXAlignment = Enum.TextXAlignment.Center,
 	AutoButtonColor = false,
 	ZIndex = 20,
 })
 openButton.BackgroundColor3 = Theme.Colors.PanelSoft
-corner(openButton, 10)
-stroke(openButton, 1.5, Theme.Colors.Purple, 0)
+corner(openButton, 24)
+local openButtonStroke = stroke(openButton, 1, Theme.Colors.Divider, 0.15)
 
 local menuOpen = false
+local menuTweens = {}
+
+local function playMenuTween(
+	instance: Instance,
+	duration: number,
+	properties: {[string]: any},
+	style: Enum.EasingStyle?,
+	direction: Enum.EasingDirection?
+)
+	local previous = menuTweens[instance]
+	if previous then
+		previous:Cancel()
+	end
+	local animation = tween(instance, duration, properties, style, direction)
+	menuTweens[instance] = animation
+	return animation
+end
 
 local function setOpen(open: boolean)
 	if menuOpen == open then
@@ -986,41 +1035,42 @@ local function setOpen(open: boolean)
 	end
 
 	menuOpen = open
+	openButton.Visible = not open
 
 	if open then
 		backdrop.Visible = true
 		backdrop.BackgroundTransparency = 1
-		windowScale.Scale = 0.9
-		shadowScale.Scale = 0.9
+		windowScale.Scale = settingsBaseScale * 0.98
+		shadowScale.Scale = settingsBaseScale * 0.98
 
-		tween(backdrop, 0.18, { BackgroundTransparency = 0.38 })
-		tween(
+		playMenuTween(backdrop, 0.18, { BackgroundTransparency = 0.45 })
+		playMenuTween(
 			windowScale,
 			0.22,
-			{ Scale = 1 },
+			{ Scale = settingsBaseScale },
 			Enum.EasingStyle.Back
 		)
-		tween(
+		playMenuTween(
 			shadowScale,
 			0.22,
-			{ Scale = 1 },
+			{ Scale = settingsBaseScale },
 			Enum.EasingStyle.Back
 		)
 	else
-		tween(backdrop, 0.15, { BackgroundTransparency = 1 })
+		playMenuTween(backdrop, 0.15, { BackgroundTransparency = 1 })
 
-		local closing = tween(
+		local closing = playMenuTween(
 			windowScale,
 			0.15,
-			{ Scale = 0.9 },
+			{ Scale = settingsBaseScale * 0.98 },
 			Enum.EasingStyle.Quad,
 			Enum.EasingDirection.In
 		)
 
-		tween(
+		playMenuTween(
 			shadowScale,
 			0.15,
-			{ Scale = 0.9 },
+			{ Scale = settingsBaseScale * 0.98 },
 			Enum.EasingStyle.Quad,
 			Enum.EasingDirection.In
 		)
@@ -1033,16 +1083,72 @@ local function setOpen(open: boolean)
 	end
 end
 
+local menuController = nil
+
+local function registerWithMenuController()
+	while gui.Parent do
+		local eclipseUI = (_G :: any).EclipseUI
+		if eclipseUI and type(eclipseUI.RegisterPanel) == "function" then
+			eclipseUI.RegisterPanel("Settings", {
+				Open = function()
+					setOpen(true)
+				end,
+				Close = function()
+					setOpen(false)
+				end,
+				Focus = function()
+					if UserInputService.GamepadEnabled then
+						task.defer(function()
+							if menuOpen then
+								GuiService.SelectedObject = closeButton
+							end
+						end)
+					end
+				end,
+			})
+			menuController = eclipseUI
+			return eclipseUI
+		end
+		task.wait()
+	end
+	return nil
+end
+
+task.spawn(registerWithMenuController)
+
+local function requestPanelOpen()
+	local controller = menuController
+	if controller and type(controller.OpenPanel) == "function" then
+		controller.OpenPanel("Settings")
+		return
+	end
+	task.spawn(function()
+		local readyController = registerWithMenuController()
+		if readyController then
+			readyController.OpenPanel("Settings")
+		end
+	end)
+end
+
+local function requestPanelClose()
+	local controller = menuController
+	if controller and type(controller.CloseCurrentPanel) == "function" then
+		controller.CloseCurrentPanel()
+	else
+		setOpen(false)
+	end
+end
+
 openButton.Activated:Connect(function()
-	setOpen(true)
+	requestPanelOpen()
 end)
 
 closeButton.Activated:Connect(function()
-	setOpen(false)
+	requestPanelClose()
 end)
 
 backdrop.Activated:Connect(function()
-	setOpen(false)
+	requestPanelClose()
 end)
 
 window.InputBegan:Connect(function()
@@ -1093,34 +1199,96 @@ for _, button in ipairs({
 	resetButton,
 	saveButton,
 	}) do
-	local originalSize = button.Size
+	local interactionScale = new("UIScale", {
+		Parent = button,
+		Scale = 1,
+	})
+
+	button.MouseEnter:Connect(function()
+		tween(interactionScale, 0.12, { Scale = 1.02 })
+	end)
+	button.SelectionGained:Connect(function()
+		tween(interactionScale, 0.12, { Scale = 1.02 })
+	end)
 
 	button.MouseButton1Down:Connect(function()
-		tween(
-			button,
-			0.07,
-			{
-				Size = UDim2.new(
-					originalSize.X.Scale,
-					originalSize.X.Offset - 3,
-					originalSize.Y.Scale,
-					originalSize.Y.Offset - 3
-				),
-			}
-		)
+		tween(interactionScale, 0.07, { Scale = 0.98 })
 	end)
 
 	button.MouseButton1Up:Connect(function()
-		tween(button, 0.11, { Size = originalSize }, Enum.EasingStyle.Back)
+		tween(interactionScale, 0.11, { Scale = 1.02 })
 	end)
 
 	button.MouseLeave:Connect(function()
-		tween(button, 0.11, { Size = originalSize }, Enum.EasingStyle.Back)
+		tween(interactionScale, 0.11, { Scale = 1 })
+	end)
+	button.SelectionLost:Connect(function()
+		tween(interactionScale, 0.11, { Scale = 1 })
 	end)
 end
 
--- Zet dit op true wanneer je wilt dat Settings direct opent bij Play.
-local OPEN_ON_START = true
-if OPEN_ON_START then
-	setOpen(true)
-end
+openButton.MouseEnter:Connect(function()
+	tween(openButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.CardHover,
+		BackgroundTransparency = 0.02,
+	})
+	tween(openButtonStroke, 0.12, {
+		Color = Theme.Colors.PurpleBright,
+		Transparency = 0.02,
+	})
+end)
+openButton.MouseLeave:Connect(function()
+	tween(openButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.PanelSoft,
+		BackgroundTransparency = 0.14,
+	})
+	tween(openButtonStroke, 0.12, {
+		Color = Theme.Colors.Divider,
+		Transparency = 0.15,
+	})
+end)
+openButton.SelectionGained:Connect(function()
+	tween(openButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.CardHover,
+		BackgroundTransparency = 0.02,
+	})
+	tween(openButtonStroke, 0.12, {
+		Color = Theme.Colors.PurpleBright,
+		Transparency = 0.02,
+	})
+end)
+openButton.SelectionLost:Connect(function()
+	tween(openButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.PanelSoft,
+		BackgroundTransparency = 0.14,
+	})
+	tween(openButtonStroke, 0.12, {
+		Color = Theme.Colors.Divider,
+		Transparency = 0.15,
+	})
+end)
+
+closeButton.MouseEnter:Connect(function()
+	tween(closeButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.Red,
+		TextColor3 = Theme.Colors.White,
+	})
+end)
+closeButton.MouseLeave:Connect(function()
+	tween(closeButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.Panel,
+		TextColor3 = Theme.Colors.Red,
+	})
+end)
+closeButton.SelectionGained:Connect(function()
+	tween(closeButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.Red,
+		TextColor3 = Theme.Colors.White,
+	})
+end)
+closeButton.SelectionLost:Connect(function()
+	tween(closeButton, 0.12, {
+		BackgroundColor3 = Theme.Colors.Panel,
+		TextColor3 = Theme.Colors.Red,
+	})
+end)

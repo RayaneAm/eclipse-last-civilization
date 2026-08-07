@@ -5,13 +5,9 @@
 -- component for that context. IconTile itself is left unchanged for its
 -- existing (grid-cell) uses.
 --
--- Rest state is a real filled circular chip (BackgroundTransparency ~0.3,
--- the button's own accent color, NO stroke — see Theme.luau's art-direction
--- header) rather than fully invisible: HUD icons need presence of their own
--- since they float directly over the busy 3D world, not just a hover
--- reaction. Uses Theme.Shadow.Hero — the strongest depth tier in the
--- system — for the same reason. Hover/press deepen the fill further.
--- Optional small notification Badge (e.g. "!") for a limited-time offer.
+-- Compact horizontal cards keep icon and label readable over the game world.
+-- Accent color is limited to the icon plate and side rail so color communicates
+-- purpose without turning every shortcut into a different floating circle.
 
 local Theme = require(script.Parent.Parent.Theme)
 local Motion = require(script.Parent.Parent.Motion)
@@ -35,63 +31,125 @@ export type HudIconButtonOptions = {
 	Parent: Instance?,
 }
 
-local REST_TRANSPARENCY = 0.3
-local HOVER_TRANSPARENCY = 0.12
+local REST_TRANSPARENCY = 0.24
+local HOVER_TRANSPARENCY = 0.08
+local ACTIVE_TRANSPARENCY = 0.02
+
+function HudIconButton.SetActive(button: TextButton, active: boolean)
+	button:SetAttribute("Active", active)
+
+	local accent = button:FindFirstChild("Accent")
+	if accent and accent:IsA("Frame") then
+		Motion.Tween(accent, "ActiveWidth", Theme.Motion.HoverIn, {
+			Size = UDim2.new(0, if active then 5 else 3, 1, -16),
+		})
+	end
+
+	local iconPlate = button:FindFirstChild("IconPlate")
+	if iconPlate and iconPlate:IsA("Frame") then
+		Motion.Tween(iconPlate, "ActivePlate", Theme.Motion.HoverIn, {
+			BackgroundTransparency = if active then 0.05 else 0.3,
+		})
+	end
+
+	local label = button:FindFirstChild("Label")
+	if label and label:IsA("TextLabel") then
+		label.Font = if active then Enum.Font.GothamBold else Theme.Font.Label.Font
+		label.TextColor3 = if active then Theme.Colors.TextPrimary else Theme.Colors.TextSecondary
+	end
+
+	Motion.Tween(button, "ActiveWash", Theme.Motion.HoverIn, {
+		BackgroundTransparency = if active then ACTIVE_TRANSPARENCY else REST_TRANSPARENCY,
+	})
+end
 
 -- Returns (container, button) — mirrors IconTile's return shape so existing
 -- call sites migrate with minimal churn.
 function HudIconButton.new(options: HudIconButtonOptions): (Frame, TextButton)
 	local accentColor = options.AccentColor or Theme.Colors.Brand
-	local tileSize = options.Size or UDim2.fromOffset(56, 56)
+	local tileSize = options.Size or UDim2.fromOffset(180, 52)
 
 	local container = Instance.new("Frame")
 	container.Name = options.Name or "HudIconButton"
-	container.AutomaticSize = Enum.AutomaticSize.Y
-	container.Size = UDim2.new(tileSize.X.Scale, tileSize.X.Offset, 0, 0)
+	container.Size = tileSize
 	container.Position = options.Position or UDim2.fromScale(0, 0)
 	container.AnchorPoint = options.AnchorPoint or Vector2.new(0, 0)
 	container.LayoutOrder = options.LayoutOrder or 0
 	container.BackgroundTransparency = 1
 
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.Padding = UDim.new(0, Theme.Spacing.XS)
-	layout.Parent = container
+	local visualGroup = Instance.new("CanvasGroup")
+	visualGroup.Name = "VisualGroup"
+	visualGroup.Size = UDim2.fromScale(1, 1)
+	visualGroup.BackgroundTransparency = 1
+	visualGroup.GroupTransparency = 0
+	visualGroup.Parent = container
 
 	local button = Instance.new("TextButton")
 	button.Name = "Button"
-	button.Size = tileSize
-	button.LayoutOrder = 1
+	button.Size = UDim2.fromScale(1, 1)
 	button.AutoButtonColor = false
 	button.Text = ""
-	button.BackgroundColor3 = accentColor
+	button.BackgroundColor3 = Theme.Colors.PanelBackground
 	button.BackgroundTransparency = REST_TRANSPARENCY
 	button.BorderSizePixel = 0
-	button.Parent = container
+	button:SetAttribute("Active", false)
+	button.Parent = visualGroup
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = Theme.Corner.Pill
+	corner.CornerRadius = Theme.Corner.Medium
 	corner.Parent = button
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Theme.Colors.TextMuted
+	stroke.Thickness = 1
+	stroke.Transparency = 0.72
+	stroke.Parent = button
+
+	local accentRail = Instance.new("Frame")
+	accentRail.Name = "Accent"
+	accentRail.Size = UDim2.new(0, 3, 1, -16)
+	accentRail.Position = UDim2.fromOffset(0, 8)
+	accentRail.BackgroundColor3 = accentColor
+	accentRail.BackgroundTransparency = 0.12
+	accentRail.BorderSizePixel = 0
+	accentRail.Parent = button
+
+	local railCorner = Instance.new("UICorner")
+	railCorner.CornerRadius = Theme.Corner.Pill
+	railCorner.Parent = accentRail
+
+	local iconPlate = Instance.new("Frame")
+	iconPlate.Name = "IconPlate"
+	iconPlate.Size = UDim2.fromOffset(36, 36)
+	iconPlate.AnchorPoint = Vector2.new(0, 0.5)
+	iconPlate.Position = UDim2.new(0, Theme.Spacing.S, 0.5, 0)
+	iconPlate.BackgroundColor3 = accentColor
+	iconPlate.BackgroundTransparency = 0.3
+	iconPlate.BorderSizePixel = 0
+	iconPlate.Parent = button
+
+	local iconCorner = Instance.new("UICorner")
+	iconCorner.CornerRadius = Theme.Corner.Medium
+	iconCorner.Parent = iconPlate
 
 	local icon = Instance.new("TextLabel")
 	icon.Name = "Icon"
 	icon.BackgroundTransparency = 1
 	icon.Size = UDim2.fromScale(1, 1)
 	icon.Font = Enum.Font.GothamBold
-	icon.TextSize = 30
+	icon.TextSize = 22
 	icon.TextColor3 = Theme.Colors.TextPrimary
 	icon.TextStrokeColor3 = Color3.new(0, 0, 0)
-	icon.TextStrokeTransparency = 0.5
+	icon.TextStrokeTransparency = 0.65
 	icon.Text = options.Icon
-	icon.Parent = button
+	icon.Parent = iconPlate
 
 	if options.Badge then
 		local badge = Instance.new("Frame")
 		badge.Name = "Badge"
-		badge.Size = UDim2.fromOffset(18, 18)
+		badge.Size = UDim2.fromOffset(16, 16)
 		badge.AnchorPoint = Vector2.new(1, 0)
-		badge.Position = UDim2.new(1, 4, 0, -4)
+		badge.Position = UDim2.new(1, 5, 0, -5)
 		badge.BackgroundColor3 = Theme.Colors.Danger
 		badge.BorderSizePixel = 0
 		badge.ZIndex = button.ZIndex + 1
@@ -105,7 +163,7 @@ function HudIconButton.new(options: HudIconButtonOptions): (Frame, TextButton)
 		badgeLabel.BackgroundTransparency = 1
 		badgeLabel.Size = UDim2.fromScale(1, 1)
 		badgeLabel.Font = Theme.Font.Caption.Font
-		badgeLabel.TextSize = 11
+		badgeLabel.TextSize = 10
 		badgeLabel.TextColor3 = Theme.Colors.TextPrimary
 		badgeLabel.Text = options.Badge
 		badgeLabel.ZIndex = badge.ZIndex + 1
@@ -113,45 +171,50 @@ function HudIconButton.new(options: HudIconButtonOptions): (Frame, TextButton)
 	end
 
 	if options.Label then
-		local pill = Instance.new("Frame")
-		pill.Name = "LabelPill"
-		pill.AutomaticSize = Enum.AutomaticSize.X
-		pill.Size = UDim2.new(0, 0, 0, 18)
-		pill.LayoutOrder = 2
-		pill.BackgroundColor3 = Theme.Colors.PanelBackground
-		pill.BackgroundTransparency = Theme.Transparency.PanelBackground
-		pill.BorderSizePixel = 0
-		pill.Parent = container
-
-		local pillCorner = Instance.new("UICorner")
-		pillCorner.CornerRadius = Theme.Corner.Pill
-		pillCorner.Parent = pill
-
-		local pillPadding = Instance.new("UIPadding")
-		pillPadding.PaddingLeft = UDim.new(0, Theme.Spacing.S)
-		pillPadding.PaddingRight = UDim.new(0, Theme.Spacing.S)
-		pillPadding.Parent = pill
-
-		local pillLabel = Instance.new("TextLabel")
-		pillLabel.Name = "Text"
-		pillLabel.AutomaticSize = Enum.AutomaticSize.X
-		pillLabel.Size = UDim2.new(0, 0, 1, 0)
-		pillLabel.BackgroundTransparency = 1
-		pillLabel.Font = Theme.Font.Caption.Font
-		pillLabel.TextSize = Theme.Font.Caption.Size
-		pillLabel.TextColor3 = Theme.Colors.TextSecondary
-		pillLabel.Text = options.Label
-		pillLabel.Parent = pill
+		local label = Instance.new("TextLabel")
+		label.Name = "Label"
+		label.Size = UDim2.new(1, -60, 1, 0)
+		label.Position = UDim2.fromOffset(54, 0)
+		label.BackgroundTransparency = 1
+		label.Font = Theme.Font.Label.Font
+		label.TextSize = Theme.Font.Label.Size
+		label.TextColor3 = Theme.Colors.TextSecondary
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextTruncate = Enum.TextTruncate.AtEnd
+		label.Text = options.Label
+		label.Parent = button
 	end
 
 	container.Parent = options.Parent
-	Shadow.Attach(button, { Transparency = Theme.Shadow.Hero.Transparency, Offset = Theme.Shadow.Hero.Offset })
+	-- The shadow is now inside a layout-neutral container, so it cannot be
+	-- mistaken for an extra black button by a parent UIListLayout.
+	Shadow.Attach(button, { Transparency = 0.58, Offset = Vector2.new(0, 4) })
 
 	local function applyHover()
-		Motion.Tween(button, "Wash", Theme.Motion.HoverIn, { BackgroundTransparency = HOVER_TRANSPARENCY })
+		local active = button:GetAttribute("Active") == true
+		Motion.Tween(button, "Wash", Theme.Motion.HoverIn, {
+			BackgroundTransparency = if active then ACTIVE_TRANSPARENCY else HOVER_TRANSPARENCY,
+		})
+		Motion.Tween(iconPlate, "HoverPlate", Theme.Motion.HoverIn, {
+			BackgroundTransparency = if active then 0.05 else 0.16,
+		})
+		local label = button:FindFirstChild("Label")
+		if label and label:IsA("TextLabel") then
+			label.TextColor3 = Theme.Colors.TextPrimary
+		end
 	end
 	local function clearHover()
-		Motion.Tween(button, "Wash", Theme.Motion.HoverOut, { BackgroundTransparency = REST_TRANSPARENCY })
+		local active = button:GetAttribute("Active") == true
+		Motion.Tween(button, "Wash", Theme.Motion.HoverOut, {
+			BackgroundTransparency = if active then ACTIVE_TRANSPARENCY else REST_TRANSPARENCY,
+		})
+		Motion.Tween(iconPlate, "HoverPlate", Theme.Motion.HoverOut, {
+			BackgroundTransparency = if active then 0.05 else 0.3,
+		})
+		local label = button:FindFirstChild("Label")
+		if label and label:IsA("TextLabel") then
+			label.TextColor3 = if active then Theme.Colors.TextPrimary else Theme.Colors.TextSecondary
+		end
 	end
 	button.MouseEnter:Connect(applyHover)
 	button.MouseLeave:Connect(clearHover)
@@ -162,7 +225,14 @@ function HudIconButton.new(options: HudIconButtonOptions): (Frame, TextButton)
 		Motion.Tween(icon, "Pulse", Theme.Motion.Pulse, { TextTransparency = 0.35 })
 	end
 
-	local cleanup = Interaction.Bind(button, { OnActivated = options.OnActivated })
+	local cleanup = Interaction.Bind(button, {
+		HoverScale = 1.02,
+		PressScale = 0.98,
+		IdleStrokeTransparency = 0.88,
+		HoverStrokeTransparency = 0.7,
+		PressStrokeTransparency = 0.55,
+		OnActivated = options.OnActivated,
+	})
 	button.Destroying:Once(cleanup)
 
 	return container, button

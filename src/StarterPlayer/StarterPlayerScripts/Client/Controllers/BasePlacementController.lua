@@ -242,7 +242,7 @@ function BasePlacementController:_buildUI()
 		Name = "Picker",
 		Size = UDim2.new(0, 320, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Position = UDim2.fromScale(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.46),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Parent = screenGui,
 	})
@@ -378,7 +378,7 @@ function BasePlacementController:Start()
 	local player = Players.LocalPlayer
 
 	self._trove:Add(RunService.Heartbeat:Connect(function()
-		if not active or not ghost then
+		if player:GetAttribute("EclipseMenuOpen") == true or not active or not ghost then
 			return
 		end
 		local mouse = player:GetMouse()
@@ -388,7 +388,7 @@ function BasePlacementController:Start()
 	end))
 
 	self._trove:Add(UserInputService.InputBegan:Connect(function(input, processed)
-		if processed or not active or not ghost then
+		if player:GetAttribute("EclipseMenuOpen") == true or processed or not active or not ghost then
 			return
 		end
 		if input.KeyCode == Enum.KeyCode.R then

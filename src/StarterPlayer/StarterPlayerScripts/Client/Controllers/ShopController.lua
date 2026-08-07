@@ -198,7 +198,7 @@ function ShopController:_buildShopPanel()
 	backdrop.Name = "Backdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.5
+	backdrop.BackgroundTransparency = 1
 	backdrop.GroupTransparency = 1
 	backdrop.Visible = false
 	backdrop.Parent = screenGui
@@ -218,7 +218,7 @@ function ShopController:_buildShopPanel()
 	local panel = GlassPanel.new({
 		Name = "Panel",
 		Size = UDim2.new(0.8, 0, 0.78, 0),
-		Position = UDim2.fromScale(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.46),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Parent = backdrop,
 	})
@@ -329,7 +329,7 @@ function ShopController:_buildStarterPackPanel()
 	backdrop.Name = "Backdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.5
+	backdrop.BackgroundTransparency = 1
 	backdrop.GroupTransparency = 1
 	backdrop.Visible = false
 	backdrop.Parent = screenGui
@@ -352,7 +352,7 @@ function ShopController:_buildStarterPackPanel()
 		Name = "Panel",
 		Size = UDim2.new(0.6, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Position = UDim2.fromScale(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.46),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		AccentColor = accentColor,
 		Gradient = false,

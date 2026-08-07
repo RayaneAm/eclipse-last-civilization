@@ -128,7 +128,7 @@ function QuestConfig.DescribeCurrentObjective(state: PlayerSessionTypes.QuestSta
 		if table.find(state.CompletedQuestIds, QuestConfig.TutorialQuest.id) then
 			return "Quest complete. Thank you, survivor.", nil, nil
 		end
-		return `Talk to start: {QuestConfig.TutorialQuest.name}`, nil, nil
+		return "Speak to the Survivor Guide", 0, 1
 	end
 
 	local quest = QuestConfig.Get(state.ActiveQuestId)

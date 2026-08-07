@@ -74,6 +74,7 @@ Theme.Colors = {
 	BrandDim = Color3.fromRGB(100, 80, 200),
 	Gold = Color3.fromRGB(255, 190, 90), -- premium/featured/promo only — formalizes the value Starter Pack already hardcoded ad hoc
 	Teal = Color3.fromRGB(90, 200, 190), -- economy/trade HUD accent (Shop, Supply Shop)
+	Trade = Color3.fromRGB(80, 190, 225), -- player-to-player trading / marketplace
 	TextPrimary = Color3.new(1, 1, 1),
 	TextSecondary = Color3.fromRGB(215, 215, 220),
 	TextMuted = Color3.fromRGB(160, 160, 170),

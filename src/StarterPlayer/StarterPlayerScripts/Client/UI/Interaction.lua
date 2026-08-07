@@ -23,6 +23,9 @@ local Interaction = {}
 export type InteractionOptions = {
 	HoverScale: number?,
 	PressScale: number?,
+	IdleStrokeTransparency: number?,
+	HoverStrokeTransparency: number?,
+	PressStrokeTransparency: number?,
 	OnActivated: (() -> ())?,
 }
 
@@ -49,6 +52,9 @@ function Interaction.Bind(button: GuiButton, options: InteractionOptions?): () -
 	local opts = options or {}
 	local hoverScale = opts.HoverScale or DEFAULT_HOVER_SCALE
 	local pressScale = opts.PressScale or DEFAULT_PRESS_SCALE
+	local idleStrokeTransparency = opts.IdleStrokeTransparency or Theme.Transparency.StrokeDefault
+	local hoverStrokeTransparency = opts.HoverStrokeTransparency or Theme.Transparency.StrokeBright
+	local pressStrokeTransparency = opts.PressStrokeTransparency or 0
 	local scale = getOrCreateScale(button)
 	local stroke = getStroke(button)
 
@@ -58,21 +64,21 @@ function Interaction.Bind(button: GuiButton, options: InteractionOptions?): () -
 	local function applyIdle()
 		Motion.Tween(scale, "Scale", Theme.Motion.HoverOut, { Scale = 1 })
 		if stroke then
-			Motion.Tween(stroke, "Stroke", Theme.Motion.HoverOut, { Transparency = Theme.Transparency.StrokeDefault })
+			Motion.Tween(stroke, "Stroke", Theme.Motion.HoverOut, { Transparency = idleStrokeTransparency })
 		end
 	end
 
 	local function applyHover()
 		Motion.Tween(scale, "Scale", Theme.Motion.HoverIn, { Scale = hoverScale })
 		if stroke then
-			Motion.Tween(stroke, "Stroke", Theme.Motion.HoverIn, { Transparency = Theme.Transparency.StrokeBright })
+			Motion.Tween(stroke, "Stroke", Theme.Motion.HoverIn, { Transparency = hoverStrokeTransparency })
 		end
 	end
 
 	local function applyPress()
 		Motion.Tween(scale, "Scale", Theme.Motion.PressDown, { Scale = pressScale })
 		if stroke then
-			Motion.Tween(stroke, "Stroke", Theme.Motion.PressDown, { Transparency = 0 })
+			Motion.Tween(stroke, "Stroke", Theme.Motion.PressDown, { Transparency = pressStrokeTransparency })
 		end
 	end
 
