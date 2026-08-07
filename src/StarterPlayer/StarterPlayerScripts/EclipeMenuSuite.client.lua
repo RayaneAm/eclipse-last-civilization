@@ -1824,6 +1824,9 @@ close.MouseButton1Click:Connect(closeCurrentPanel)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local isBackInput = input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB
+	if isBackInput and player:GetAttribute("EclipseModalDialogOpen") == true then
+		return
+	end
 	if isBackInput and (dim.Visible or activeScreen ~= nil) then
 		closeCurrentPanel()
 		return

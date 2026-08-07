@@ -29,14 +29,6 @@ local NotificationController = require(script.Parent.NotificationController)
 local MOBILE_VIEWPORT_WIDTH_THRESHOLD = 700
 local INFO_PANEL_WIDTH = 260
 local MOBILE_INFO_PANEL_WIDTH = 220
-local MENU_CARD_MIN_READABLE_WIDTH = 156
-local MENU_WINDOW_WIDTH = 1030
-local MENU_WINDOW_SCALE_MIN = 0.34
-local MENU_WINDOW_SCALE_MAX = 0.94
-local MENU_WINDOW_SCALE_VIEWPORT_WIDTH = 1120
-local MENU_WINDOW_SCALE_VIEWPORT_HEIGHT = 690
-local MENU_WINDOW_VERTICAL_RESERVE = 48
-local MENU_CARD_WINDOW_GAP = 12
 local ACTION_BUTTON_WIDTH = 152
 local ACTION_BUTTON_HEIGHT = 52
 local SUBACTION_BUTTON_WIDTH = 136
@@ -210,34 +202,27 @@ function HUDController:Init()
 	levelLabel.Parent = statusRow1
 	self._levelLabel = levelLabel
 
-	local tierLabel = Instance.new("TextLabel")
-	tierLabel.Name = "Tier"
-	tierLabel.AutomaticSize = Enum.AutomaticSize.X
-	tierLabel.Size = UDim2.new(0, 0, 1, 0)
-	tierLabel.BackgroundTransparency = 1
-	tierLabel.Font = Theme.Font.Label.Font
-	tierLabel.TextSize = Theme.Font.Label.Size
-	tierLabel.TextColor3 = Theme.Colors.BrandLight
-	tierLabel.TextXAlignment = Enum.TextXAlignment.Left
-	tierLabel.LayoutOrder = 2
-	tierLabel.Text = "TIER 0"
-	tierLabel.Parent = statusRow1
-
-	self._tierLabel = tierLabel
-	self._tierPill = tierLabel
+	local xpCaption = Instance.new("TextLabel")
+	xpCaption.Name = "XPCaption"
+	xpCaption.AutomaticSize = Enum.AutomaticSize.X
+	xpCaption.Size = UDim2.new(0, 0, 1, 0)
+	xpCaption.BackgroundTransparency = 1
+	xpCaption.Font = Theme.Font.Caption.Font
+	xpCaption.TextSize = Theme.Font.Caption.Size
+	xpCaption.TextColor3 = Theme.Colors.TextSecondary
+	xpCaption.TextXAlignment = Enum.TextXAlignment.Right
+	xpCaption.LayoutOrder = 2
+	xpCaption.Text = "0 / 100 XP"
+	xpCaption.Parent = statusRow1
+	self._xpCaption = xpCaption
+	self._tierPill = levelLabel
 
 	local statusRow2 = Instance.new("Frame")
 	statusRow2.Name = "Row2"
-	statusRow2.Size = UDim2.new(1, 0, 0, 20)
+	statusRow2.Size = UDim2.new(1, 0, 0, 6)
 	statusRow2.LayoutOrder = 2
 	statusRow2.BackgroundTransparency = 1
 	statusRow2.Parent = statusPanel
-
-	local statusRow2Layout = Instance.new("UIListLayout")
-	statusRow2Layout.FillDirection = Enum.FillDirection.Vertical
-	statusRow2Layout.SortOrder = Enum.SortOrder.LayoutOrder
-	statusRow2Layout.Padding = UDim.new(0, Theme.Spacing.XXS)
-	statusRow2Layout.Parent = statusRow2
 
 	local _xpBar, setXPProgress = ProgressBar.new({
 		Name = "XPBar",
@@ -253,19 +238,6 @@ function HUDController:Init()
 		xpTrackStroke.Transparency = 0.42
 	end
 	self._setXPProgress = setXPProgress
-
-	local xpCaption = Instance.new("TextLabel")
-	xpCaption.Name = "XPCaption"
-	xpCaption.Size = UDim2.new(1, 0, 0, 12)
-	xpCaption.LayoutOrder = 2
-	xpCaption.BackgroundTransparency = 1
-	xpCaption.Font = Theme.Font.Caption.Font
-	xpCaption.TextSize = Theme.Font.Caption.Size
-	xpCaption.TextColor3 = Theme.Colors.TextSecondary
-	xpCaption.TextXAlignment = Enum.TextXAlignment.Left
-	xpCaption.Text = "0 / 100 XP"
-	xpCaption.Parent = statusRow2
-	self._xpCaption = xpCaption
 
 	-- Borderless quest section nested inside the player card.
 	local questPanel = GlassPanel.new({
@@ -346,8 +318,8 @@ function HUDController:Init()
 	questLabel.Size = UDim2.new(1, 0, 0, 0)
 	questLabel.AutomaticSize = Enum.AutomaticSize.Y
 	questLabel.LayoutOrder = 3
-	questLabel.Font = Enum.Font.GothamBold
-	questLabel.TextSize = 18
+	questLabel.Font = Enum.Font.GothamMedium
+	questLabel.TextSize = 16
 	questLabel.TextXAlignment = Enum.TextXAlignment.Left
 	questLabel.TextYAlignment = Enum.TextYAlignment.Top
 	questLabel.TextWrapped = true
@@ -383,7 +355,7 @@ function HUDController:Init()
 	-- Backpack/Shop header never has to compete with XP and currency details.
 	local compactQuestGroup = Instance.new("CanvasGroup")
 	compactQuestGroup.Name = "CompactQuest"
-	compactQuestGroup.Size = UDim2.fromOffset(232, 32)
+	compactQuestGroup.Size = UDim2.fromOffset(244, 54)
 	compactQuestGroup.Position = UDim2.fromOffset(Theme.Spacing.L, Theme.Spacing.L - 6)
 	compactQuestGroup.BackgroundTransparency = 1
 	compactQuestGroup.GroupTransparency = 1
@@ -393,7 +365,7 @@ function HUDController:Init()
 	local compactQuestPanel = GlassPanel.new({
 		Name = "QuestChip",
 		Size = UDim2.fromScale(1, 1),
-		CornerRadius = Theme.Corner.Pill,
+		CornerRadius = Theme.Corner.Medium,
 		Gradient = false,
 		DropShadow = false,
 		Parent = compactQuestGroup,
@@ -402,11 +374,13 @@ function HUDController:Init()
 	local compactPadding = Instance.new("UIPadding")
 	compactPadding.PaddingLeft = UDim.new(0, Theme.Spacing.M)
 	compactPadding.PaddingRight = UDim.new(0, Theme.Spacing.M)
+	compactPadding.PaddingTop = UDim.new(0, Theme.Spacing.XS)
+	compactPadding.PaddingBottom = UDim.new(0, Theme.Spacing.XS)
 	compactPadding.Parent = compactQuestPanel
 
 	local compactQuestTitle = Instance.new("TextLabel")
 	compactQuestTitle.Name = "QuestTitle"
-	compactQuestTitle.Size = UDim2.new(1, -58, 1, 0)
+	compactQuestTitle.Size = UDim2.new(1, -58, 0, 18)
 	compactQuestTitle.BackgroundTransparency = 1
 	compactQuestTitle.Font = Theme.Font.Label.Font
 	compactQuestTitle.TextSize = Theme.Font.Caption.Size
@@ -421,7 +395,7 @@ function HUDController:Init()
 	local compactQuestProgress = Instance.new("TextLabel")
 	compactQuestProgress.Name = "Progress"
 	compactQuestProgress.AutomaticSize = Enum.AutomaticSize.X
-	compactQuestProgress.Size = UDim2.new(0, 0, 1, 0)
+	compactQuestProgress.Size = UDim2.new(0, 0, 0, 18)
 	compactQuestProgress.AnchorPoint = Vector2.new(1, 0)
 	compactQuestProgress.Position = UDim2.fromScale(1, 0)
 	compactQuestProgress.BackgroundTransparency = 1
@@ -433,6 +407,20 @@ function HUDController:Init()
 	compactQuestProgress.Text = "0 / 1"
 	compactQuestProgress.Parent = compactQuestPanel
 	self._compactQuestProgress = compactQuestProgress
+
+	local compactQuestObjective = Instance.new("TextLabel")
+	compactQuestObjective.Name = "Objective"
+	compactQuestObjective.Position = UDim2.fromOffset(0, 20)
+	compactQuestObjective.Size = UDim2.new(1, 0, 0, 20)
+	compactQuestObjective.BackgroundTransparency = 1
+	compactQuestObjective.Font = Enum.Font.GothamMedium
+	compactQuestObjective.TextSize = 13
+	compactQuestObjective.TextColor3 = Theme.Colors.TextPrimary
+	compactQuestObjective.TextXAlignment = Enum.TextXAlignment.Left
+	compactQuestObjective.TextTruncate = Enum.TextTruncate.AtEnd
+	compactQuestObjective.Text = "Speak to the Survivor Guide"
+	compactQuestObjective.Parent = compactQuestPanel
+	self._compactQuestObjective = compactQuestObjective
 
 	-- Only three actions stay visible by default. Economy destinations live
 	-- behind the Shops disclosure so gameplay keeps visual priority.
@@ -707,40 +695,6 @@ function HUDController:Init()
 	local menuModeOpen = false
 	local menuModeToken = 0
 
-	-- Match the unified menu's responsive scale closely enough to reserve the
-	-- lane to its left. The quest card can stay fully visible when that lane
-	-- is readable; narrower viewports fall back to the compact quest chip.
-	local function getMenuSafeCardWidth(): number
-		local camera = Workspace.CurrentCamera
-		if not camera then
-			return INFO_PANEL_WIDTH
-		end
-
-		local viewport = camera.ViewportSize
-		local menuScale = math.clamp(
-			math.min(
-				viewport.X / MENU_WINDOW_SCALE_VIEWPORT_WIDTH,
-				(viewport.Y - MENU_WINDOW_VERTICAL_RESERVE) / MENU_WINDOW_SCALE_VIEWPORT_HEIGHT
-			),
-			MENU_WINDOW_SCALE_MIN,
-			MENU_WINDOW_SCALE_MAX
-		)
-		local menuLeftEdge = (viewport.X - MENU_WINDOW_WIDTH * menuScale) * 0.5
-		return math.floor(menuLeftEdge - currentEdgeSpacing - MENU_CARD_WINDOW_GAP)
-	end
-
-	local function useCompactQuestInMenu(): boolean
-		return isNarrow or getMenuSafeCardWidth() < MENU_CARD_MIN_READABLE_WIDTH
-	end
-
-	local function getStatusPanelWidth(): number
-		local normalWidth = if isNarrow then MOBILE_INFO_PANEL_WIDTH else INFO_PANEL_WIDTH
-		if menuModeOpen and not useCompactQuestInMenu() then
-			return math.min(normalWidth, getMenuSafeCardWidth())
-		end
-		return normalWidth
-	end
-
 	local function updateOfferVisibility()
 		starterPackContainer.Visible = starterPackEligible and not isNarrow
 		mobileOfferContainer.Visible = starterPackEligible and isNarrow
@@ -769,9 +723,10 @@ function HUDController:Init()
 
 		local edgeSpacing = if narrow then Theme.Spacing.M else Theme.Spacing.L
 		currentEdgeSpacing = edgeSpacing
+		local infoPanelWidth = if narrow then MOBILE_INFO_PANEL_WIDTH else INFO_PANEL_WIDTH
 		local actionButtonWidth = if narrow then MOBILE_ACTION_BUTTON_SIZE else ACTION_BUTTON_WIDTH
 
-		statusPanel.Size = UDim2.new(0, getStatusPanelWidth(), 0, 0)
+		statusPanel.Size = UDim2.new(0, infoPanelWidth, 0, 0)
 		statusPanel.Position = UDim2.fromOffset(edgeSpacing, edgeSpacing)
 		scrapPanel.Position = UDim2.new(1, -Theme.Spacing.S, 0, Theme.Spacing.S)
 		scrapPanel.Size = UDim2.fromOffset(if narrow then 134 else 176, if narrow then 38 else 44)
@@ -779,19 +734,18 @@ function HUDController:Init()
 		persistentCurrencyLabel.Position = UDim2.fromOffset(if narrow then 36 else 46, 2)
 		persistentCurrencyLabel.Size = UDim2.new(1, if narrow then -40 else -50, 0, 21)
 		scrapCaption.Position = UDim2.fromOffset(if narrow then 36 else 46, if narrow then 21 else 25)
-		compactQuestGroup.Size = UDim2.fromOffset(if narrow then 158 else 232, 32)
+		compactQuestGroup.Size = UDim2.fromOffset(if narrow then 200 else 244, 54)
 		compactQuestGroup.Position = UDim2.fromOffset(
 			edgeSpacing,
 			if menuModeOpen then edgeSpacing else edgeSpacing - 6
 		)
 
 		if menuModeOpen then
-			local compactMenuMode = useCompactQuestInMenu()
-			gameplayInfoGroup.Visible = not compactMenuMode
+			gameplayInfoGroup.Visible = false
 			gameplayInfoGroup.GroupTransparency = 0
 			gameplayInfoGroup.Position = UDim2.fromScale(0, 0)
-			compactQuestGroup.Visible = compactMenuMode
-			compactQuestGroup.GroupTransparency = if compactMenuMode then 0 else 1
+			compactQuestGroup.Visible = true
+			compactQuestGroup.GroupTransparency = 0
 		else
 			gameplayInfoGroup.Visible = true
 			gameplayInfoGroup.GroupTransparency = 0
@@ -820,28 +774,11 @@ function HUDController:Init()
 			return
 		end
 
-		local wasCompactMenu = compactQuestGroup.Visible
 		menuModeOpen = open
 		menuModeToken += 1
 		local token = menuModeToken
 
 		if open then
-			if not useCompactQuestInMenu() then
-				gameplayInfoGroup.Visible = true
-				compactQuestGroup.Visible = false
-				compactQuestGroup.GroupTransparency = 1
-				local keepFull = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-				Motion.Tween(gameplayInfoGroup, "MenuModeFade", keepFull, { GroupTransparency = 0 })
-				Motion.Tween(gameplayInfoGroup, "MenuModeSlide", keepFull, { Position = UDim2.fromScale(0, 0) })
-				Motion.Tween(
-					statusPanel,
-					"MenuModeWidth",
-					TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{ Size = UDim2.new(0, getStatusPanelWidth(), 0, 0) }
-				)
-				return
-			end
-
 			gameplayInfoGroup.Visible = true
 			compactQuestGroup.Visible = false
 			compactQuestGroup.GroupTransparency = 1
@@ -866,7 +803,7 @@ function HUDController:Init()
 					)
 				end
 			end)
-		elseif wasCompactMenu then
+		else
 			gameplayInfoGroup.Visible = false
 			compactQuestGroup.Visible = true
 			local chipExit = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
@@ -884,25 +821,11 @@ function HUDController:Init()
 					gameplayInfoGroup.Visible = true
 					gameplayInfoGroup.GroupTransparency = 1
 					gameplayInfoGroup.Position = UDim2.fromOffset(0, -8)
-					statusPanel.Size = UDim2.new(0, getStatusPanelWidth(), 0, 0)
 					local fullEnter = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 					Motion.Tween(gameplayInfoGroup, "MenuModeFade", fullEnter, { GroupTransparency = 0 })
 					Motion.Tween(gameplayInfoGroup, "MenuModeSlide", fullEnter, { Position = UDim2.fromScale(0, 0) })
 				end
 			end)
-		else
-			gameplayInfoGroup.Visible = true
-			compactQuestGroup.Visible = false
-			compactQuestGroup.GroupTransparency = 1
-			local restoreFull = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-			Motion.Tween(gameplayInfoGroup, "MenuModeFade", restoreFull, { GroupTransparency = 0 })
-			Motion.Tween(gameplayInfoGroup, "MenuModeSlide", restoreFull, { Position = UDim2.fromScale(0, 0) })
-			Motion.Tween(
-				statusPanel,
-				"MenuModeWidth",
-				TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Size = UDim2.new(0, getStatusPanelWidth(), 0, 0) }
-			)
 		end
 	end
 
@@ -990,6 +913,7 @@ function HUDController:_refreshQuestTracker(state: PlayerSessionTypes.QuestState
 	local text, current, target = QuestConfig.DescribeCurrentObjective(state)
 	local objectiveText = string.gsub(text, " %(%d+/%d+%)$", "")
 	self._questLabel.Text = objectiveText
+	self._compactQuestObjective.Text = objectiveText
 
 	local quest = if state.ActiveQuestId then QuestConfig.Get(state.ActiveQuestId) else QuestConfig.TutorialQuest
 	local questName = if quest then quest.name else "Current Objective"
@@ -1059,7 +983,6 @@ end
 
 function HUDController:_applySession(session: PlayerSessionTypes.PlayerSessionData)
 	self._currencyLabel.Text = formatScrap(session.Currencies.Scrap)
-	self._tierLabel.Text = `TIER {session.Progression.Tier}`
 	self._levelLabel.Text = `◆  LEVEL {session.Progression.Tier}`
 
 	local threshold = XPConfig.ThresholdForTier(session.Progression.Tier)
@@ -1085,7 +1008,6 @@ function HUDController:Start()
 		self._currencyLabel.Text = formatScrap(newScrap)
 	end))
 	self._trove:Add(Net.GetEvent("ProgressionChanged").OnClientEvent:Connect(function(newTier: number)
-		self._tierLabel.Text = `TIER {newTier}`
 		self._levelLabel.Text = `◆  LEVEL {newTier}`
 	end))
 	self._trove:Add(Net.GetEvent("QuestUpdated").OnClientEvent:Connect(function(state: PlayerSessionTypes.QuestState)
@@ -1098,7 +1020,6 @@ function HUDController:Start()
 			NotificationController.Toast("XPGained", `+{payload.AmountGained} XP`)
 		end
 		if payload.TierUp then
-			self._tierLabel.Text = `TIER {payload.Tier}`
 			self._levelLabel.Text = `◆  LEVEL {payload.Tier}`
 			self:_playLevelUpPop()
 			NotificationController.Banner("LevelUp", `Tier {payload.Tier} Reached`, "New areas may now be available.")
