@@ -1,259 +1,265 @@
 --!strict
--- Phase 3A: promoted from a wide wall to Survivor Haven's landmark — a real
--- status monument, not a kiosk. Local -Z is "front" throughout this file
--- (CFrame.new(position, lookAt) orients -Z toward lookAt, and SurfaceGui's
--- default Face = Front renders on a part's -Z face) — every panel/prop below
--- is offset toward -Z so it sits proud of the wall, facing the plaza the
--- player approaches from.
-
-local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local HavenLayoutConfig = require(ReplicatedStorage.Shared.Config.HavenLayoutConfig)
 local LeaderboardConfig = require(ReplicatedStorage.Shared.Config.LeaderboardConfig)
 local GeneratorKit = require(script.Parent.GeneratorKit)
+local WorldFacilityLabelGenerator = require(script.Parent.WorldFacilityLabelGenerator)
 
 local LeaderboardHallGenerator = {}
 
--- Phase 3A: enlarged again — 28x14 (Phase 1 correction's "large and
--- prominent" fix) still read as too small to notice from spawn. 40x22 with
--- taller towers and a viewing apron is sized to be an obvious landmark while
--- staying inside the facility's own verified clearance budget (bounding
--- radius ~26, checked against Base Gate on the same bearing and the nudged
--- Market Rest Nook — see the Phase 3A plan).
-local WALL_WIDTH = 40
-local WALL_HEIGHT = 22
-local WALL_THICKNESS = 1.2
-local TOWER_WIDTH = 5
-local TOWER_HEIGHT = 28
--- Phase 3B: panels enlarged (9x12 -> 10x16 studs) so 3 real categories at
--- up to 10 rows each read cleanly instead of cramped — the wall is already
--- 22 tall, so there's real headroom below the crown for a taller panel.
-local PANEL_WIDTH = 10
-local PANEL_HEIGHT = 16
-local PANEL_SPACING = 14
-local APRON_DEPTH = 10
-local APRON_WIDTH = WALL_WIDTH + 2 * TOWER_WIDTH + 4
-local ROW_HEIGHT = 34
-local ROW_GAP = 4
+type LeaderboardCategory = {
+	Id: string,
+	Title: string,
+	RowCount: number,
+}
 
-local function buildPanel(parent: Instance, wallCenterCFrame: CFrame, index: number, category: LeaderboardConfig.LeaderboardCategory, accentColor: Color3)
-	local offsetX = (index - 2) * PANEL_SPACING
-	local panelCFrame = wallCenterCFrame * CFrame.new(offsetX, 0, -(WALL_THICKNESS / 2 + 0.05))
+local HALL_WIDTH = 60
+local PANEL_WIDTH = 17.5
+local PANEL_HEIGHT = 18
+local GOLD = Color3.fromRGB(231, 184, 61)
+local SILVER = Color3.fromRGB(190, 201, 213)
+local BRONZE = Color3.fromRGB(193, 119, 68)
+local STANDARD = Color3.fromRGB(104, 158, 185)
 
-	local panel = GeneratorKit.NewPart({
-		Name = `Panel{index}`,
-		Size = Vector3.new(PANEL_WIDTH, PANEL_HEIGHT, 0.1),
-		CFrame = panelCFrame,
-		Material = Enum.Material.Metal,
-		Color = Color3.fromRGB(30, 30, 36),
-		CanCollide = false,
-		Parent = parent,
-	})
+local function newLabel(parent: Instance, name: string, position: UDim2, size: UDim2): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.Position = position
+	label.Size = size
+	label.Font = Enum.Font.GothamMedium
+	label.TextColor3 = Color3.fromRGB(224, 229, 229)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.Parent = parent
+	return label
+end
 
-	local surfaceGui = Instance.new("SurfaceGui")
-	surfaceGui.Name = "PanelDisplay"
-	surfaceGui.Face = Enum.NormalId.Front
-	surfaceGui.LightInfluence = 0
-	surfaceGui.PixelsPerStud = 36
-	surfaceGui.Parent = panel
+local function rankColor(rank: number): Color3
+	if rank == 1 then
+		return GOLD
+	elseif rank == 2 then
+		return SILVER
+	elseif rank == 3 then
+		return BRONZE
+	end
+	return STANDARD
+end
 
-	local root = Instance.new("Frame")
-	root.Size = UDim2.fromScale(1, 1)
-	root.BackgroundTransparency = 1
-	root.Parent = surfaceGui
+local function medalName(rank: number): string
+	if rank == 1 then
+		return "GOLD"
+	elseif rank == 2 then
+		return "SILVER"
+	elseif rank == 3 then
+		return "BRONZE"
+	end
+	return ""
+end
 
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 16)
-	padding.PaddingRight = UDim.new(0, 16)
-	padding.PaddingTop = UDim.new(0, 16)
-	padding.PaddingBottom = UDim.new(0, 16)
-	padding.Parent = root
+local function buildRankRow(parent: Instance, rank: number)
+	local color = rankColor(rank)
+	local rowHeight = 0.066
+	local rowGap = 0.0065
+	local row = Instance.new("Frame")
+	row.Name = `Rank{rank}`
+	row.BackgroundColor3 = if rank <= 3 then color:Lerp(Color3.fromRGB(18, 22, 27), 0.78) else Color3.fromRGB(35, 41, 47)
+	row.BackgroundTransparency = if rank <= 3 then 0.08 else 0.2
+	row.BorderSizePixel = 0
+	row.Position = UDim2.fromScale(0.04, 0.215 + (rank - 1) * (rowHeight + rowGap))
+	row.Size = UDim2.fromScale(0.92, rowHeight)
+	row:SetAttribute("Rank", rank)
+	row:SetAttribute("AwardType", medalName(rank))
+	row.Parent = parent
 
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, ROW_GAP)
-	layout.Parent = root
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.18, 0)
+	corner.Parent = row
 
-	local header = Instance.new("TextLabel")
-	header.Name = "Header"
-	header.BackgroundTransparency = 1
-	header.Size = UDim2.new(1, 0, 0, 40)
-	header.Font = Enum.Font.GothamBlack
-	header.TextScaled = true
-	header.TextColor3 = accentColor
-	header.Text = category.Title
-	header.LayoutOrder = 0
-	header.Parent = root
+	local rankBadge = newLabel(row, "Medal", UDim2.fromScale(0.015, 0.08), UDim2.fromScale(0.14, 0.84))
+	rankBadge.BackgroundTransparency = 0
+	rankBadge.BackgroundColor3 = color
+	rankBadge.Font = Enum.Font.GothamBold
+	rankBadge.Text = `#{rank}`
+	rankBadge.TextColor3 = Color3.fromRGB(19, 23, 27)
+	rankBadge.TextScaled = true
+	rankBadge.TextXAlignment = Enum.TextXAlignment.Center
+	local badgeCorner = Instance.new("UICorner")
+	badgeCorner.CornerRadius = UDim.new(1, 0)
+	badgeCorner.Parent = rankBadge
 
-	local divider = Instance.new("Frame")
-	divider.Name = "Divider"
-	divider.Size = UDim2.new(1, 0, 0, 3)
-	divider.BackgroundColor3 = accentColor
-	divider.BorderSizePixel = 0
-	divider.LayoutOrder = 1
-	divider.Parent = root
+	local survivor = newLabel(row, "Survivor", UDim2.fromScale(0.18, 0), UDim2.fromScale(if rank <= 3 then 0.49 else 0.79, 1))
+	survivor.Font = if rank <= 3 then Enum.Font.GothamBold else Enum.Font.GothamMedium
+	survivor.Text = "AWAITING SURVIVOR"
+	survivor.TextColor3 = if rank <= 3 then color else Color3.fromRGB(221, 226, 227)
+	survivor.TextScaled = true
+	survivor.TextTruncate = Enum.TextTruncate.AtEnd
 
-	-- Still placeholder rows throughout — no backend leaderboard/stats
-	-- system exists yet (see LeaderboardConfig's header comment); the row
-	-- count/title are real, the ranked names/values are not.
-	for i = 1, category.RowCount do
-		local row = Instance.new("TextLabel")
-		row.Name = `Row{i}`
-		row.BackgroundTransparency = 1
-		row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
-		row.Font = Enum.Font.Code
-		row.TextSize = 20
-		row.TextColor3 = Color3.new(1, 1, 1)
-		row.TextXAlignment = Enum.TextXAlignment.Left
-		row.Text = `{i}.  ———`
-		row.LayoutOrder = i + 1
-		row.Parent = root
+	if rank <= 3 then
+		local award = newLabel(row, "Award", UDim2.fromScale(0.69, 0), UDim2.fromScale(0.28, 1))
+		award.Font = Enum.Font.GothamBold
+		award.Text = medalName(rank)
+		award.TextColor3 = color
+		award.TextScaled = true
+		award.TextXAlignment = Enum.TextXAlignment.Right
 	end
 end
 
--- `position`/`origin` follow the same convention CivicBuildingGenerator.Build
--- already uses: the hall faces `origin.Position` (the plaza center)
--- regardless of which angle it's placed at.
-function LeaderboardHallGenerator.Build(parent: Instance, origin: CFrame, position: Vector3, accentColor: Color3): Model
-	GeneratorKit.CleanupPrevious(parent, "Leaderboards")
+local function buildPanel(parent: Instance, cf: CFrame, index: number, category: LeaderboardCategory, accent: Color3)
+	local panelPart = GeneratorKit.NewPart({
+		Name = `LeaderboardPanel{index}`,
+		Size = Vector3.new(PANEL_WIDTH, PANEL_HEIGHT, 0.35),
+		CFrame = cf * CFrame.new((index - 2) * 19.2, 13.4, -1.2),
+		Material = Enum.Material.Metal,
+		Color = Color3.fromRGB(24, 29, 35),
+		CanCollide = false,
+		Parent = parent,
+	})
+	panelPart:SetAttribute("LeaderboardCategoryId", category.Id)
+	panelPart:SetAttribute("LeaderboardRowCount", category.RowCount)
+	panelPart:SetAttribute("PanelBottomWorldHeight", 4.4)
+	panelPart:SetAttribute("RankTenBottomPaddingScale", 0.0665)
 
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "TopTenDisplay"
+	gui.Face = Enum.NormalId.Front
+	gui.CanvasSize = Vector2.new(700, 820)
+	gui.LightInfluence = 0.15
+	gui.MaxDistance = 190
+	gui.Parent = panelPart
+
+	local header = Instance.new("Frame")
+	header.Name = "CategoryHeader"
+	header.BackgroundColor3 = Color3.fromRGB(31, 42, 51)
+	header.BorderSizePixel = 0
+	header.Position = UDim2.fromScale(0.04, 0.035)
+	header.Size = UDim2.fromScale(0.92, 0.155)
+	header.Parent = gui
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0.12, 0)
+	headerCorner.Parent = header
+	local stripe = Instance.new("Frame")
+	stripe.Name = "AccentStripe"
+	stripe.BackgroundColor3 = accent
+	stripe.BorderSizePixel = 0
+	stripe.Size = UDim2.fromScale(0.025, 1)
+	stripe.Parent = header
+
+	local title = newLabel(header, "Title", UDim2.fromScale(0.07, 0.06), UDim2.fromScale(0.89, 0.58))
+	title.Font = Enum.Font.GothamBold
+	title.Text = category.Title
+	title.TextColor3 = Color3.fromRGB(235, 239, 239)
+	title.TextScaled = true
+	local subtitle = newLabel(header, "Subtitle", UDim2.fromScale(0.07, 0.62), UDim2.fromScale(0.89, 0.25))
+	subtitle.Font = Enum.Font.GothamBold
+	subtitle.Text = "TOP 10 SURVIVORS"
+	subtitle.TextColor3 = accent
+	subtitle.TextScaled = true
+
+	local rowCount = math.min(category.RowCount, 10)
+	for rank = 1, rowCount do
+		buildRankRow(gui, rank)
+	end
+end
+
+function LeaderboardHallGenerator.Build(
+	parent: Instance,
+	origin: CFrame,
+	position: Vector3,
+	accentColor: Color3
+): Model
+	GeneratorKit.CleanupPrevious(parent, "Leaderboards")
 	local model = Instance.new("Model")
 	model.Name = "Leaderboards"
-
-	local wallCFrame = CFrame.new(position, origin.Position)
-	local wallCenterCFrame = wallCFrame * CFrame.new(0, WALL_HEIGHT / 2 - 0.3, 0)
+	local spawn = origin:PointToWorldSpace(HavenLayoutConfig.SPAWN_LOCAL_POSITION)
+	local cf = CFrame.lookAt(position, Vector3.new(spawn.X, position.Y, spawn.Z))
 
 	GeneratorKit.NewPart({
-		Name = "HallWall",
-		Size = Vector3.new(WALL_WIDTH, WALL_HEIGHT, WALL_THICKNESS),
-		CFrame = wallCFrame * CFrame.new(0, WALL_HEIGHT / 2, 0),
+		Name = "RecordsHallFoundation",
+		Size = Vector3.new(HALL_WIDTH + 5, 1, 17),
+		CFrame = cf * CFrame.new(0, 0.5, -5.5),
+		Material = Enum.Material.Pavement,
+		Color = Color3.fromRGB(72, 76, 79),
+		Parent = model,
+	})
+	GeneratorKit.NewPart({
+		Name = "RankingWall",
+		Size = Vector3.new(HALL_WIDTH, 27, 2.2),
+		CFrame = cf * CFrame.new(0, 13.5, 0),
 		Material = Enum.Material.Slate,
-		Color = Color3.fromRGB(46, 44, 50),
+		Color = Color3.fromRGB(37, 42, 49),
 		Parent = model,
 	})
-
-	-- A wide, +0.4-stud raised viewing apron in front of the wall — "add a
-	-- viewing area in front" and "status monument, not a kiosk." Extends
-	-- toward the plaza (-Z, away from Base Gate, which sits further out
-	-- along the same bearing) so it never threatens that footprint.
-	local apronCFrame = wallCFrame * CFrame.new(0, 0.2, -APRON_DEPTH / 2 - WALL_THICKNESS / 2)
 	GeneratorKit.NewPart({
-		Name = "ViewingApron",
-		Size = Vector3.new(APRON_WIDTH, 0.4, APRON_DEPTH),
-		CFrame = apronCFrame,
-		Material = Enum.Material.Concrete,
-		Color = Color3.fromRGB(64, 62, 66),
+		Name = "RecordsCanopy",
+		Size = Vector3.new(HALL_WIDTH + 5, 1.3, 6),
+		CFrame = cf * CFrame.new(0, 27.6, -1.7),
+		Material = Enum.Material.Metal,
+		Color = Color3.fromRGB(47, 54, 62),
 		Parent = model,
 	})
-	for _, side in { -1, 1 } do
+	GeneratorKit.NewPart({
+		Name = "RecordsHeaderBacking",
+		Size = Vector3.new(HALL_WIDTH - 4, 4.2, 0.5),
+		CFrame = cf * CFrame.new(0, 24.7, -1.35),
+		Material = Enum.Material.DiamondPlate,
+		Color = Color3.fromRGB(49, 61, 70),
+		CanCollide = false,
+		Parent = model,
+	})
+
+	for _, x in { -(HALL_WIDTH / 2 + 1.8), HALL_WIDTH / 2 + 1.8 } do
 		GeneratorKit.NewPart({
-			Name = if side < 0 then "ApronRailLeft" else "ApronRailRight",
-			Size = Vector3.new(0.6, 1.4, APRON_DEPTH),
-			CFrame = apronCFrame * CFrame.new(side * (APRON_WIDTH / 2 - 0.3), 0.9, 0),
+			Name = "RecordsHallTower",
+			Size = Vector3.new(3.6, 30, 5),
+			CFrame = cf * CFrame.new(x, 15, 0),
+			Material = Enum.Material.Concrete,
+			Color = Color3.fromRGB(42, 47, 54),
+			Parent = model,
+		})
+		GeneratorKit.NewPart({
+			Name = "ViewingRail",
+			Size = Vector3.new(0.8, 2.3, 13),
+			CFrame = cf * CFrame.new(x, 1.15, -7),
 			Material = Enum.Material.Metal,
-			Color = Color3.fromRGB(58, 56, 60),
-			CanCollide = false,
+			Color = Color3.fromRGB(56, 62, 67),
 			Parent = model,
 		})
-	end
-
-	-- 2 flanking tower pillars, taller than the wall — the "large, prominent"
-	-- landmark silhouette, framing the panel wall between them.
-	for _, sign in { -1, 1 } do
-		GeneratorKit.NewPart({
-			Name = if sign < 0 then "TowerLeft" else "TowerRight",
-			Size = Vector3.new(TOWER_WIDTH, TOWER_HEIGHT, TOWER_WIDTH),
-			CFrame = wallCFrame * CFrame.new(sign * (WALL_WIDTH / 2 + TOWER_WIDTH / 2), TOWER_HEIGHT / 2, 0),
-			Material = Enum.Material.Slate,
-			Color = Color3.fromRGB(40, 38, 44),
-			Parent = model,
-		})
-
-		-- A stepped cap on each tower — reads as deliberate monument
-		-- architecture rather than a plain pillar stub.
-		GeneratorKit.NewPart({
-			Name = if sign < 0 then "TowerCapLeft" else "TowerCapRight",
-			Size = Vector3.new(TOWER_WIDTH + 1, 1.2, TOWER_WIDTH + 1),
-			CFrame = wallCFrame * CFrame.new(sign * (WALL_WIDTH / 2 + TOWER_WIDTH / 2), TOWER_HEIGHT + 0.6, 0),
-			Material = Enum.Material.Metal,
-			Color = Color3.fromRGB(54, 52, 58),
-			CanCollide = false,
-			Parent = model,
-		})
-
-		local towerLight = Instance.new("PointLight")
-		towerLight.Color = accentColor
-		towerLight.Brightness = 1.6
-		towerLight.Range = 22
-		towerLight.Parent = GeneratorKit.NewPart({
-			Name = if sign < 0 then "TowerLightLeft" else "TowerLightRight",
-			Size = Vector3.new(0.2, 0.2, 0.2),
-			CFrame = wallCFrame * CFrame.new(sign * (WALL_WIDTH / 2 + TOWER_WIDTH / 2), TOWER_HEIGHT - 1, -TOWER_WIDTH / 2 - 0.2),
-			Transparency = 1,
-			CanCollide = false,
-			Parent = model,
-		})
-		CollectionService:AddTag(towerLight, "AmbientFlicker")
 	end
 
 	for index, category in LeaderboardConfig.Categories do
-		buildPanel(model, wallCenterCFrame, index, category, accentColor)
+		buildPanel(model, cf, index, category, accentColor)
 	end
 
-	-- Integrated sign frame spanning the top of the wall — a real crown
-	-- structure, not a thin floating neon bar.
-	local crownCFrame = wallCFrame * CFrame.new(0, WALL_HEIGHT + 1.6, 0)
-	GeneratorKit.NewPart({
-		Name = "CrownFrame",
-		Size = Vector3.new(WALL_WIDTH * 0.7, 2.6, 0.6),
-		CFrame = crownCFrame,
-		Material = Enum.Material.Metal,
-		Color = Color3.fromRGB(40, 38, 44),
-		CanCollide = false,
-		Parent = model,
+	for _, x in { -25, -8.5, 8.5, 25 } do
+		local practical = GeneratorKit.NewPart({
+			Name = "RecordsHallPractical",
+			Size = Vector3.new(4, 0.45, 0.7),
+			CFrame = cf * CFrame.new(x, 26.8, -3.2),
+			Material = Enum.Material.Neon,
+			Color = Color3.fromRGB(107, 190, 224),
+			CanCollide = false,
+			Parent = model,
+		})
+		local light = Instance.new("SurfaceLight")
+		light.Face = Enum.NormalId.Bottom
+		light.Color = Color3.fromRGB(130, 203, 232)
+		light.Brightness = 0.75
+		light.Range = 15
+		light.Angle = 95
+		light.Parent = practical
+	end
+
+	WorldFacilityLabelGenerator.Build(model, cf * CFrame.new(0, 25, -1.7), {
+		Title = "SURVIVOR RECORDS HALL",
+		Subtitle = "TOP 10  |  HONOR THE BEST",
+		AccentColor = accentColor,
+		Width = 31,
+		MaxDistance = 190,
 	})
-
-	local crown = GeneratorKit.NewPart({
-		Name = "CrownSign",
-		Size = Vector3.new(WALL_WIDTH * 0.66, 1.8, 0.25),
-		CFrame = crownCFrame * CFrame.new(0, 0, -0.5),
-		Material = Enum.Material.Neon,
-		Color = accentColor,
-		Transparency = 0.15,
-		CanCollide = false,
-		Parent = model,
-	})
-
-	local crownBillboard = Instance.new("BillboardGui")
-	crownBillboard.Name = "CrownLabel"
-	crownBillboard.Size = UDim2.fromOffset(340, 60)
-	crownBillboard.MaxDistance = 200
-	crownBillboard.LightInfluence = 0
-	crownBillboard.Parent = crown
-
-	local crownLabel = Instance.new("TextLabel")
-	crownLabel.BackgroundTransparency = 1
-	crownLabel.Size = UDim2.fromScale(1, 1)
-	crownLabel.Font = Enum.Font.GothamBlack
-	crownLabel.TextScaled = true
-	crownLabel.TextColor3 = Color3.new(1, 1, 1)
-	crownLabel.Text = "LEADERBOARDS"
-	crownLabel.Parent = crownBillboard
-
-	-- (The 2 tower lights above are the only dynamic lights on this
-	-- structure — stays inside the "avoid too many dynamic lights"
-	-- performance rule; no separate edge-light pass needed now that the
-	-- towers themselves carry the flanking light.)
-
-	-- Phase 3B: deliberately no FacilityAnchor/HavenFacility tag here — the
-	-- brief is explicit that the Leaderboard Hall should be read passively,
-	-- with no "E / View" prompt and no floating hologram info card. With no
-	-- tagged anchor, FacilityController's tag-scan loop simply never
-	-- attaches anything to this structure; this is a pure omission, not a
-	-- special case handled elsewhere.
-
-	GeneratorKit.Finalize(model, "HallWall")
+	GeneratorKit.Finalize(model, "RankingWall")
 	model.Parent = parent
-
 	return model
 end
 

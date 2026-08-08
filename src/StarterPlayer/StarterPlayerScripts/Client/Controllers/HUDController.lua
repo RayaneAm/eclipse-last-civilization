@@ -69,6 +69,12 @@ HUDController.StarterPackOpenRequested = Signal.new()
 HUDController.MarketplaceOpenRequested = Signal.new()
 HUDController.SupplyShopOpenRequested = Signal.new()
 
+-- Daily Quests. Same decoupled Signal pattern; DailyQuestsController listens.
+-- Deliberately a HUD button rather than yet another building to walk to —
+-- the day's objectives are something a player checks constantly, and Haven is
+-- already a long walk end to end.
+HUDController.DailyQuestsOpenRequested = Signal.new()
+
 function HUDController:Init()
 	self._trove = Trove.new()
 
@@ -385,6 +391,7 @@ function HUDController:Init()
 	})
 	self._menuButton = menuButton
 
+<<<<<<< HEAD
 	local shopsMenu = Instance.new("CanvasGroup")
 	shopsMenu.Name = "ShopsMenu"
 	shopsMenu.Size = UDim2.new(0, ACTION_BUTTON_WIDTH, 0, 0)
@@ -565,6 +572,34 @@ function HUDController:Init()
 	self._supplyShopButton = supplyShopButton
 
 	local shopContainer, shopButton = HudIconButton.new({
+=======
+	-- Daily Quests, immediately left of the menu button — same bottom-right
+	-- thumb zone, since "what am I supposed to do today" is checked as often
+	-- as the backpack. Labeled (unlike the 🎒 tile) because 📋 alone isn't
+	-- self-explanatory to a younger player. BrandLight keeps it in the core-
+	-- progression accent family without reading as a second Menu button.
+	local _dailyQuestsContainer, dailyQuestsButton = HudIconButton.new({
+		Name = "DailyQuestsButton",
+		Icon = "📋",
+		Label = "Daily Quests",
+		AccentColor = Theme.Colors.BrandLight,
+		Size = UDim2.fromOffset(56, 56),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -(Theme.Spacing.L + 56 + Theme.Spacing.S), 1, -Theme.Spacing.L),
+		OnActivated = function()
+			HUDController.DailyQuestsOpenRequested:Fire()
+		end,
+		Parent = root,
+	})
+	self._dailyQuestsButton = dailyQuestsButton
+
+	-- Phase 3B: 2 monetization entry points, left-middle of the screen —
+	-- "easy to notice but not intrusive" per the brief, mirroring the
+	-- bottom-right menu button's unlabeled-icon-tile treatment but with a
+	-- label pill since these are less universally self-explanatory than a
+	-- backpack glyph.
+	local _shopContainer, shopButton = HudIconButton.new({
+>>>>>>> feature/spawn-redesign
 		Name = "ShopButton",
 		Icon = "🛒",
 		Label = "Shop",

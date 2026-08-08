@@ -14,6 +14,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
+local Net = require(ReplicatedStorage.Shared.Modules.Net)
 
 local WAYPOINT_TAG = "CameraWaypoint"
 local DEFAULT_SEGMENT_TIME = 3.25
@@ -170,9 +171,20 @@ local function playSweep(waypoints: { BasePart }, skipRequested: () -> boolean)
 	end
 end
 
+local function shouldPlayHavenIntro(): boolean
+	local ok, session = pcall(function()
+		return Net.GetFunction("RequestPlayerSession"):InvokeServer()
+	end)
+	return ok and typeof(session) == "table" and session.TutorialCompleted == true
+end
+
 function CameraIntroController:Start()
 	local character = player.Character or player.CharacterAdded:Wait()
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+	if not shouldPlayHavenIntro() then
+		markFinished()
+		return
+	end
 
 	local waypoints = getSortedWaypoints()
 	if #waypoints < 2 then

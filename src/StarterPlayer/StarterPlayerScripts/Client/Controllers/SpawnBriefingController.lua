@@ -76,7 +76,7 @@ local function buildAndShow(screenGui: ScreenGui)
 	end
 	local data = session :: PlayerSessionTypes.PlayerSessionData
 	local quest = data.Quest
-	local questComplete = table.find(quest.CompletedQuestIds, QuestConfig.TutorialQuest.id) ~= nil
+	local questComplete = data.TutorialCompleted
 
 	if not questComplete then
 		-- Priority 1: an incomplete tutorial/active quest always wins.

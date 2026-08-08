@@ -37,6 +37,12 @@ local Remotes: { [string]: RemoteKind } = {
 	RequestStarterPackEligible = "Function", -- client -> server: no payload; returns boolean (PlaytimeService, < 30 total hours)
 	RequestDailyRewardRoll = "Function", -- client -> server: no payload; returns { Rejected: true } or { RewardIndex: number, Streak: number }
 
+	-- Daily Quests. Read-only from the client's side by design — there is no
+	-- "I completed a daily objective" remote, exactly as QuestService's header
+	-- explains for the tutorial chain. Progress only ever moves on server Signals.
+	RequestDailyQuests = "Function", -- client -> server: no payload; rolls today's set if needed and returns the DailyQuestState
+	DailyQuestsUpdated = "Event", -- server -> client: push the full DailyQuestState on roll/progress/completion
+
 	-- Phase 4A: personal base
 	RequestBaseState = "Function", -- client -> server: payload is the base owner's userId; returns BaseSessionData or nil
 	BaseStateChanged = "Event", -- server -> client(s currently at/watching that base): push the full BaseSessionData on any mutation

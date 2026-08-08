@@ -2,10 +2,10 @@
 -- Phase 4B: the durable player-economy profile — Scrap, carried materials,
 -- equipped tool, material lock/discovery/pin metadata, and the concurrency/
 -- idempotency records PlayerProfileService needs. Deliberately narrower than
--- the full PlayerSessionData: Progression (Tier/XP) and Quest stay owned by
--- PlayerSessionService, in-memory, unpersisted — a separate, pre-existing gap
--- this economy-focused phase does not fold in (see PlayerProfileService's
--- header for why). Follows BaseSessionTypes.luau's own convention exactly
+-- the full PlayerSessionData: Progression (Tier/XP) and completed quests stay
+-- owned and persisted by PlayerSessionService. This economy profile type is
+-- retained for its future dedicated owner and is not activated by the
+-- tutorial/profile foundation. Follows BaseSessionTypes.luau's convention
 -- (CURRENT_SCHEMA_VERSION, NewDefault, data-only, no Instances).
 
 export type AppliedEconomyOperation = {

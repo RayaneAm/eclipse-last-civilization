@@ -15,7 +15,7 @@ local CraftingConfig = {}
 
 CraftingConfig.Hatchet = {
 	id = "Hatchet",
-	name = "Hatchet",
+	name = "Field Hatchet",
 	inputs = {
 		{ itemId = "Wood", amount = 2 },
 		{ itemId = "Stone", amount = 1 },

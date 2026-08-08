@@ -129,6 +129,13 @@ local function buildCell(origin: CFrame, worldX: number, worldZ: number, startRa
 	local surfaceY = 1 + (rawHeight - 1) * blend
 
 	local columnHeight = surfaceY - FLOOR_Y
+	-- Deep negative Volcanic noise can put the mathematical surface below the
+	-- authored terrain floor. That column is intentionally empty; passing a
+	-- zero/negative Y extent to FillBlock only produces "Extents cannot be
+	-- empty" and adds no terrain, so treat it as a clean no-op.
+	if columnHeight <= 0 then
+		return
+	end
 	Terrain:FillBlock(
 		CFrame.new(worldPos.X, FLOOR_Y + columnHeight / 2, worldPos.Z),
 		Vector3.new(GRID_CELL_SIZE * 1.05, columnHeight, GRID_CELL_SIZE * 1.05),

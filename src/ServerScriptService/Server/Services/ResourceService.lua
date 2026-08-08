@@ -7,50 +7,45 @@
 -- clearly-functional primitive per resource type — not an art pass, see
 -- Prompt 4A's explicit boundary.
 --
--- PROMPT 4A.1 FIX (superseded by Prompt 2, see below): nodes previously
--- spawned at BIOME_START_RADIUS+40..260 — physically beyond the Forest
--- gate's barrier. A tier-0 player could never reach them, so "Gather
--- Wood/Stone" could never complete.
---
--- PROMPT 2: the tutorial moved out of the main plaza entirely, into its own
--- isolated Tutorial Zone (tools/BuildTutorialZone.luau) at
--- WorldMapConfig.RealOrigin.Tutorial — "move beginner resource piles out of
--- the main plaza and into the tutorial zone." Nodes now spawn scattered
--- around that zone's own small ground platform instead of near Haven's
--- Onboarding District.
+-- BuildTutorialZone authors six deterministic spawn anchors inside the
+-- first-login clearing. Runtime nodes are created exactly at those anchors,
+-- keeping the central walking lane clean and validation reproducible.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
-local WorldMapConfig = require(ReplicatedStorage.Shared.Config.WorldMapConfig)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local ResourceConfig = require(ReplicatedStorage.Shared.Config.ResourceConfig)
 local InventoryService = require(script.Parent.InventoryService)
 local ToolService = require(script.Parent.ToolService)
 
 local ResourceService = {}
 
+-- Fired once per successful harvest, AFTER every distance/cooldown check has
+-- passed. Distinct from InventoryService.ItemAdded on purpose: that counts
+-- ITEMS (and fires for crafting, trades and rewards too), this counts NODES,
+-- which is what a "harvest N nodes" objective actually means.
+ResourceService.NodeHarvested = Signal.new() -- (player, resourceId, amountGranted)
+
 local NODE_TAG = "ResourceNode"
 local ROOT_NAME = "ResourceNodes_Runtime"
 local MAX_HARVEST_DISTANCE = 14 -- studs; anti-teleport-harvest sanity check
 
-local NODE_COUNTS = {
-	{ resourceId = "Wood", count = 6 },
-	{ resourceId = "Stone", count = 4 },
-	{ resourceId = "Food", count = 4 },
-}
+local RESOURCE_SPAWN_TAG = "TutorialResourceSpawn"
 
--- Scattered around the Tutorial Zone's own small ground platform (see
--- tools/BuildTutorialZone.luau) — past the arrival platform (radius 22) and
--- clear of the return portal (offset 30 along +X from origin), well inside
--- the zone's sealing boundary.
-local NODE_MIN_RADIUS = 26
-local NODE_MAX_RADIUS = 48
+-- Which gameplay area a node belongs to. Anchors may declare an `AreaId`
+-- attribute; the tutorial anchor tag predates that and is the only spawner
+-- today, so it falls back to the Tutorial area. A future biome node spawner
+-- sets AreaId to its BiomeConfig id and everything downstream (notably
+-- DailyQuestService's accessibility check) picks it up with no further change.
+ResourceService.TUTORIAL_AREA_ID = "Tutorial"
 
 type NodeState = {
 	part: BasePart,
 	resourceId: string,
+	areaId: string,
 	readyAt: number,
 }
 
@@ -87,20 +82,38 @@ end
 -- relative to that origin), not out on procedural Terrain — so this places
 -- them directly at ground height rather than routing through TerrainSurface
 -- (which only raycasts against Terrain, and the Tutorial Zone has none).
-local function spawnNode(parent: Instance, resourceId: string, origin: CFrame, rng: Random)
-	local angle = rng:NextNumber(0, math.pi * 2)
-	local sampleDirection = Vector3.new(math.cos(angle), 0, math.sin(angle))
-	local radius = rng:NextNumber(NODE_MIN_RADIUS, NODE_MAX_RADIUS)
-
-	local surfacePosition = origin.Position + sampleDirection * radius
-
+local function spawnNodeAt(parent: Instance, resourceId: string, surfacePosition: Vector3, areaId: string)
 	local part = buildNodeGeometry(resourceId, CFrame.new(surfacePosition))
 	part.Parent = parent
 	part:SetAttribute("ResourceId", resourceId)
+	part:SetAttribute("AreaId", areaId)
 	part:SetAttribute("Depleted", false)
 	CollectionService:AddTag(part, NODE_TAG)
 
-	nodesByPart[part] = { part = part, resourceId = resourceId, readyAt = 0 }
+	nodesByPart[part] = { part = part, resourceId = resourceId, areaId = areaId, readyAt = 0 }
+end
+
+-- What can actually be farmed in this server, grouped by the AREA it sits in:
+-- areaId -> set of resourceIds. Read by DailyQuestService, which then keeps
+-- only the areas a given player can genuinely reach through normal gameplay —
+-- "a node exists somewhere" is not the same as "this player can go get it",
+-- and a daily built on the wrong one is unfinishable (or worse, sends a
+-- finished player back into the Tutorial Zone).
+--
+-- Deliberately reports raw availability only; it owns no accessibility policy.
+-- Nodes are created once in Init and only ever deplete/respawn (never leave),
+-- so this mapping is stable for the life of the server.
+function ResourceService.GetHarvestableResourceIdsByArea(): { [string]: { [string]: boolean } }
+	local byArea: { [string]: { [string]: boolean } } = {}
+	for _, state in nodesByPart do
+		local resources = byArea[state.areaId]
+		if not resources then
+			resources = {}
+			byArea[state.areaId] = resources
+		end
+		resources[state.resourceId] = true
+	end
+	return byArea
 end
 
 local function tryHarvest(player: Player, nodeInstance: Instance): (boolean, string | number)
@@ -133,6 +146,7 @@ local function tryHarvest(player: Player, nodeInstance: Instance): (boolean, str
 	local amount = math.max(1, math.floor(resource.baseYield * multiplier + 0.5))
 
 	InventoryService.AddItem(player, state.resourceId, amount)
+	ResourceService.NodeHarvested:Fire(player, state.resourceId, amount)
 
 	state.readyAt = os.clock() + resource.respawnSeconds
 	state.part:SetAttribute("Depleted", true)
@@ -150,11 +164,24 @@ function ResourceService:Init()
 	root.Name = ROOT_NAME
 	root.Parent = Workspace
 
-	local tutorialOrigin = WorldMapConfig.RealOrigin.Tutorial
-	local rng = Random.new(9)
-	for _, entry in NODE_COUNTS do
-		for _ = 1, entry.count do
-			spawnNode(root, entry.resourceId, tutorialOrigin, rng)
+	local anchors = CollectionService:GetTagged(RESOURCE_SPAWN_TAG)
+	if #anchors == 0 then
+		warn("ResourceService: no authored Tutorial resource anchors found; run Build Complete World before playtesting")
+	end
+	for _, anchor in anchors do
+		if anchor:IsA("BasePart") then
+			local resourceId = anchor:GetAttribute("ResourceId")
+			local areaId = anchor:GetAttribute("AreaId")
+			if typeof(resourceId) == "string" and ResourceConfig.Get(resourceId) then
+				spawnNodeAt(
+					root,
+					resourceId,
+					anchor.Position,
+					if typeof(areaId) == "string" then areaId else ResourceService.TUTORIAL_AREA_ID
+				)
+			else
+				warn(`ResourceService: invalid Tutorial resource anchor {anchor:GetFullName()}`)
+			end
 		end
 	end
 

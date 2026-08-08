@@ -1,8 +1,8 @@
 --!strict
 -- Phase 3B: the dev-product purchase hook. Scope-limited per explicit
--- review: CurrencyService/InventoryService mutate the purely in-memory
--- PlayerSessionData (PlayerSessionService drops it all on leave — a
--- documented, project-wide "known gap," not something new here). A
+-- review: CurrencyService/InventoryService mutate runtime-only economy
+-- fields in PlayerSessionData; the narrow canonical profile intentionally
+-- does not persist those fields yet. A
 -- DataStore-persisted purchase record and an in-memory-only grant
 -- destination are two different systems — no UpdateAsync sequence between
 -- them can be made fully crash-proof without a real persistent player-data

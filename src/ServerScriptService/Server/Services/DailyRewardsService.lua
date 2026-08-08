@@ -12,6 +12,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local DailyRewardConfig = require(ReplicatedStorage.Shared.Config.DailyRewardConfig)
 
 local CurrencyService = require(script.Parent.CurrencyService)
@@ -23,6 +24,11 @@ local SECONDS_PER_DAY = 86400
 export type ClaimResult = { Rejected: boolean, RewardIndex: number?, Streak: number? }
 
 local DailyRewardsService = {}
+
+-- Fired once per genuinely-accepted claim (the UpdateAsync below actually
+-- wrote a new day), never on a same-day rejection — so a consumer counting
+-- Haven facility use can't be inflated by re-clicking Claim.
+DailyRewardsService.RewardClaimed = Signal.new() -- (player, rewardIndex, streak)
 
 local pendingClaims: { [Player]: boolean } = {}
 
@@ -75,6 +81,7 @@ function DailyRewardsService.Claim(player: Player): ClaimResult
 		-- whole function returns, so it always reveals an already-decided,
 		-- already-recorded result, never a client-side guess.
 		grantReward(player, DailyRewardConfig.Rewards[newRecord.RewardIndex])
+		DailyRewardsService.RewardClaimed:Fire(player, newRecord.RewardIndex, newRecord.Streak)
 		return { Rejected = false, RewardIndex = newRecord.RewardIndex, Streak = newRecord.Streak }
 	end)
 

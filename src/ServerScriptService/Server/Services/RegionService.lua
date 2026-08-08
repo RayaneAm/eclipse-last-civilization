@@ -35,8 +35,13 @@ for _, biome in BiomeConfig do
 end
 
 local function havenSpawnPosition(): Vector3
-	local direction = WorldMapConfig.DirectionForAngle(math.rad(HavenLayoutConfig.SPAWN_ANGLE_DEGREES))
-	return WorldMapConfig.WORLD_ORIGIN.Position + direction * HavenLayoutConfig.SPAWN_RADIUS + Vector3.new(0, 3, 0)
+	-- The flat +3 this used to add was measured against the bare plaza floor
+	-- and never updated when the Arrival Terrace was added on top of it, so
+	-- teleported players were being dropped with their feet a stud inside the
+	-- terrace. Now stacked off the terrace's real surface height.
+	local height = HavenLayoutConfig.SPAWN_SURFACE_HEIGHT + HavenLayoutConfig.SPAWN_ROOT_OFFSET
+	return WorldMapConfig.WORLD_ORIGIN:PointToWorldSpace(HavenLayoutConfig.SPAWN_LOCAL_POSITION)
+		+ Vector3.new(0, height, 0)
 end
 
 local function enforceUnlockedRegion(player: Player, rootPart: BasePart, region: string?)

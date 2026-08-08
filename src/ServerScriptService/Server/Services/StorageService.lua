@@ -9,12 +9,19 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 
 local BaseService = require(script.Parent.BaseService)
 local BasePermissionService = require(script.Parent.BasePermissionService)
 local InventoryService = require(script.Parent.InventoryService)
 
 local StorageService = {}
+
+-- Fired only after the deposit has actually landed in the host's Storage pool.
+-- Carries `hostUserId` because a helper depositing into someone else's base is
+-- a legitimate path here — DailyQuestService counts only deposits into the
+-- depositor's OWN base, which it can't tell apart without this.
+StorageService.ItemsDeposited = Signal.new() -- (player, hostUserId, itemId, amount)
 
 local function totalStored(session): number
 	local total = 0
@@ -48,6 +55,7 @@ local function requestDeposit(player: Player, payload: { HostUserId: number?, It
 	end
 
 	session.Storage[payload.ItemId] = (session.Storage[payload.ItemId] or 0) + payload.Amount
+	StorageService.ItemsDeposited:Fire(player, hostUserId, payload.ItemId, payload.Amount)
 	BaseService.BroadcastState(hostUserId)
 	return true
 end

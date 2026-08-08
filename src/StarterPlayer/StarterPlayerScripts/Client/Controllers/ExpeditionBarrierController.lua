@@ -25,7 +25,7 @@ local TUTORIAL_GATE_BIOME_ID = "ForestWildlands"
 local ExpeditionBarrierController = {}
 
 local fadeTargets: { BasePart } = {}
-local signBillboard: BillboardGui? = nil
+local signDisplay: LayerCollector? = nil
 local isFaded = false
 
 -- Playtest correction: the "TUTORIAL REQUIRED" warning kept showing after
@@ -34,9 +34,9 @@ local isFaded = false
 -- BaseParts and were never tagged, so they were structurally unreachable from
 -- applyFade below. ExpeditionBarrierGenerator.buildSign now tags the
 -- BillboardGui itself with SIGN_TAG so it can be found the same way.
-local function findSignBillboard(): BillboardGui?
+local function findSignDisplay(): LayerCollector?
 	for _, instance in CollectionService:GetTagged(SIGN_TAG) do
-		if instance:IsA("BillboardGui") then
+		if instance:IsA("BillboardGui") or instance:IsA("SurfaceGui") then
 			return instance
 		end
 	end
@@ -92,16 +92,16 @@ local function applyFade(faded: boolean)
 		part.LocalTransparencyModifier = if faded then 1 else 0
 	end
 
-	if not signBillboard then
-		signBillboard = findSignBillboard()
+	if not signDisplay then
+		signDisplay = findSignDisplay()
 	end
-	if signBillboard then
+	if signDisplay then
 		-- Locked (faded=false): billboard stays enabled — title and
 		-- "TUTORIAL REQUIRED" both visible, its default built state.
 		-- Unlocked (faded=true): fully disabled, so the subtitle disappears
 		-- completely and the title hides too — no locked-state warning can
 		-- remain floating in front of the portals.
-		signBillboard.Enabled = not faded
+		signDisplay.Enabled = not faded
 	end
 end
 

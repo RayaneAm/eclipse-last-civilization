@@ -26,8 +26,14 @@ local FOV_PUNCH_MAX_DISTANCE = 50 -- studs; keeps the camera beat reserved for a
 
 local GATE_TAG = "BiomeGate"
 local BARRIER_TAG = "GateBarrier"
-local BARRIER_LOCKED_TRANSPARENCY = 0.6 -- matches GateGenerator.buildBarrier's built default
-local BARRIER_UNLOCKED_TRANSPARENCY = 0.97 -- nearly invisible, not fully gone — reads as "opened," not "deleted"
+-- Must stay equal to GateGenerator.BARRIER_LOCKED_TRANSPARENCY. This one is
+-- what actually renders: applyBarrierVisual tweens every barrier to it as
+-- soon as the client picks the gate up, overwriting whatever the world build
+-- baked in. The generator now uses grounded rectangular glass panels; this
+-- shared value keeps their locked state restrained and their unlocked state
+-- nearly invisible.
+local BARRIER_LOCKED_TRANSPARENCY = 0.68
+local BARRIER_UNLOCKED_TRANSPARENCY = 0.86 -- readable energy remains after unlocking
 
 local GateController = {}
 
@@ -102,9 +108,10 @@ local function pulseActivation(anchor: BasePart)
 		return
 	end
 	local baseRange = light.Range
-	local tween = TweenService:Create(light, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {
-		Range = baseRange * 1.6,
-	})
+	local tween =
+		TweenService:Create(light, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {
+			Range = baseRange * 1.6,
+		})
 	tween:Play()
 end
 
