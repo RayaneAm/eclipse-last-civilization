@@ -353,7 +353,7 @@ function HUDController:Init()
 	questHintLabel.Parent = questPanel
 	self._questHintLabel = questHintLabel
 
-	-- Only three actions stay visible by default. Economy destinations live
+	-- Only the primary actions stay visible by default. Economy destinations live
 	-- behind the Shops disclosure so gameplay keeps visual priority.
 	local actionStack = Instance.new("Frame")
 	actionStack.Name = "ActionStack"
@@ -535,20 +535,6 @@ function HUDController:Init()
 	})
 	shopsButton = createdShopsButton
 
-	local dailyQuestsContainer, dailyQuestsButton = HudIconButton.new({
-		Name = "DailyQuestsButton",
-		Icon = "📋",
-		Label = "Daily Quests",
-		AccentColor = Theme.Colors.BrandLight,
-		Size = UDim2.fromOffset(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT),
-		LayoutOrder = 4,
-		OnActivated = function()
-			HUDController.DailyQuestsOpenRequested:Fire()
-		end,
-		Parent = actionStack,
-	})
-	self._dailyQuestsButton = dailyQuestsButton
-
 	local marketplaceContainer, marketplaceButton = HudIconButton.new({
 		Name = "MarketplaceButton",
 		Icon = "↔",
@@ -683,7 +669,6 @@ function HUDController:Init()
 		actionStack.Position = UDim2.new(1, -edgeSpacing, 0.5, 0)
 		setRootButtonCompact(backpackContainer, menuButton, narrow)
 		setRootButtonCompact(shopsContainer, createdShopsButton, narrow)
-		setRootButtonCompact(dailyQuestsContainer, dailyQuestsButton, narrow)
 		setRootButtonCompact(starterPackContainer, starterPackButton, narrow)
 
 		local shopsIconPlate = createdShopsButton:FindFirstChild("IconPlate")
