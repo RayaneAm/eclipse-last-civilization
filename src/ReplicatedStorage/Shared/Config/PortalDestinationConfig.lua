@@ -50,7 +50,7 @@ destinations.Tutorial = {
 	teaserOrigin = WorldMapConfig.WORLD_ORIGIN,
 	realOrigin = WorldMapConfig.RealOrigin.Tutorial,
 	arrivalAnchorName = "Arrival_Tutorial",
-	returnAnchorName = "ReturnLanding_Tutorial",
+	returnAnchorName = "HavenArrivalAnchor",
 	loadingText = "Entering the Tutorial Zone...",
 }
 

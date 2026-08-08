@@ -1,6 +1,6 @@
 --!strict
 -- ProximityPrompt-driven quest start/turn-in on the Quest Giver anchor
--- (GuidanceGenerator's QuestGiverAnchor, tagged "QuestGiver" specifically so
+-- (BuildTutorialZone's QuestGiverAnchor, tagged "QuestGiver" specifically so
 -- this doesn't also attach to other "NPC"-tagged anchors like the Capsule
 -- Lab's scientist spot). Shows current objective text via a billboard,
 -- matching the project's existing hologram-panel pattern rather than a new

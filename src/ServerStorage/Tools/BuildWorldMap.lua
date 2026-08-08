@@ -7,8 +7,8 @@
 -- BuildSurvivorHaven.luau for the full explanation of why this lives in
 -- ServerStorage.Tools).
 --
--- Preferred: the ECLIPSE TOOLS Studio plugin's "Build World Map" /
--- "Build Complete World" buttons (see plugin/), which call this same Run().
+-- Preferred: the ECLIPSE TOOLS Studio plugin's "BUILD COMPLETE WORLD"
+-- button (see plugin/), which reaches this stage through BuildCompleteWorld.
 --
 -- Command Bar fallback:
 --

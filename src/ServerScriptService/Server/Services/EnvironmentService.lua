@@ -23,23 +23,70 @@ local Presets: { [string]: Preset } = {
 	-- Cinematic, hopeful post-apocalypse: warm key light, cool falloff, gentle haze
 	-- for depth. Deliberately NOT dark-horror per the user's brief.
 	--
-	-- Prompt 3 art-pass tuning: bloom pulled back and its threshold raised so
-	-- it catches genuinely emissive surfaces (Neon, the Eclipse Core) instead
-	-- of glowing the whole scene; haze trimmed slightly now that Prompt 2's
-	-- real terrain is visible beyond every gate and shouldn't be hidden in
-	-- fog; a restrained SunRaysEffect added for the Core's light-shaft
-	-- synergy.
+	-- Superseded by the "cozy dusk" pass documented on Default below: the
+	-- earlier tuning kept trying to fix blown-out emissives with global
+	-- exposure/bloom, which only ever made the unlit 90% of the world darker.
+	-- Emissive brightness is now handled per-part in the generators, leaving
+	-- this file free to light the world properly.
 	Default = {
-		ClockTime = 16.5,
-		Brightness = 2.5,
-		Ambient = Color3.fromRGB(74, 82, 96),
-		OutdoorAmbient = Color3.fromRGB(120, 128, 140),
-		ExposureCompensation = 0.15,
-		ColorCorrection = { Brightness = 0.02, Contrast = 0.1, Saturation = 0.05, TintColor = Color3.fromRGB(255, 246, 235) },
-		Atmosphere = { Density = 0.3, Offset = 0.25, Color = Color3.fromRGB(199, 202, 209), Decay = Color3.fromRGB(92, 100, 120), Glare = 0.2, Haze = 1.05 },
-		Bloom = { Intensity = 0.5, Size = 24, Threshold = 1.85 },
-		DepthOfField = { FarIntensity = 0.25, FocusDistance = 40, InFocusRadius = 20, NearIntensity = 0 },
-		SunRays = { Intensity = 0.08, Spread = 0.5 },
+		-- "Cozy dusk" pass. The previous tuning was legitimately dark but
+		-- unreadable: anything more than a lamp's radius away fell to near
+		-- black, so the world read as an unlit void with a few blown-out
+		-- neon props floating in it.
+		--
+		-- The fix is deliberately split across two levers, because they do
+		-- different jobs:
+		--   * AMBIENT (here) is raised hard. Ambient/OutdoorAmbient light
+		--     surfaces only — they do NOT brighten Neon/ForceField parts,
+		--     which always render at full color regardless of Lighting. So
+		--     raising ambient closes the gap between "lit prop" and "black
+		--     nothing" WITHOUT making the already-too-bright emissives worse.
+		--   * EXPOSURE stays near neutral. Raising it would scale emissives
+		--     up too and undo the emissive trims done in the generators.
+		-- Anything still too bright after this is fixed at the source (a
+		-- darker Neon Color / higher Transparency on that part), never by
+		-- pulling global exposure back down again.
+		--
+		-- ClockTime nudged 18.2 -> 17.9 so the sun sits just on the horizon:
+		-- keeps a warm sunset band in the sky (the "cozy" half) instead of
+		-- the flat gray dome of full civil twilight, without turning it into
+		-- daytime.
+		ClockTime = 17.75,
+		Brightness = 2.6,
+		-- The single biggest readability lever: shadow-side fill. Warm-neutral
+		-- rather than the old cold blue-gray so unlit geometry reads as
+		-- "evening indoors" instead of "moonlit ruin".
+		Ambient = Color3.fromRGB(100, 106, 118),
+		OutdoorAmbient = Color3.fromRGB(138, 148, 162),
+		ExposureCompensation = 0.12,
+		-- Contrast pulled back further (0.07 -> 0.03) since positive contrast
+		-- crushes exactly the shadow detail the ambient lift is buying, and
+		-- Saturation flipped positive with a warm tint to carry the "cozy"
+		-- half of the brief.
+		ColorCorrection = {
+			Brightness = 0.04,
+			Contrast = 0,
+			Saturation = 0.01,
+			TintColor = Color3.fromRGB(241, 238, 230),
+		},
+		-- Density/Haze trimmed: at 0.28/0.9 the atmosphere was itself a large
+		-- part of the murk, greying out mid-distance geometry before the eye
+		-- ever reached it. Color/Decay warmed to match the new sun angle.
+		Atmosphere = {
+			Density = 0.14,
+			Offset = 0.25,
+			Color = Color3.fromRGB(190, 198, 208),
+			Decay = Color3.fromRGB(104, 111, 126),
+			Glare = 0.04,
+			Haze = 0.4,
+		},
+		-- Bloom trimmed again and its threshold raised: with ambient this
+		-- much higher, the old 0.12/2.6 caught ordinary lit concrete, not
+		-- just the emissives it is meant for. Larger Size keeps the halo soft
+		-- and wide (reads as glow) rather than tight and hot (reads as blown).
+		Bloom = { Intensity = 0.08, Size = 20, Threshold = 2.9 },
+		DepthOfField = { FarIntensity = 0.06, FocusDistance = 55, InFocusRadius = 35, NearIntensity = 0 },
+		SunRays = { Intensity = 0.05, Spread = 0.5 },
 	},
 }
 
@@ -69,7 +116,9 @@ function EnvironmentService:ApplyPreset(presetName: string)
 	Lighting.OutdoorAmbient = preset.OutdoorAmbient
 	Lighting.ExposureCompensation = preset.ExposureCompensation
 	Lighting.GlobalShadows = true
-	Lighting.ShadowSoftness = 0.2
+	-- Softened 0.2 -> 0.55: hard-edged shadows at this sun angle cut the
+	-- plaza into sharp black wedges, which is the opposite of cozy.
+	Lighting.ShadowSoftness = 0.55
 	Lighting.EnvironmentDiffuseScale = 1
 	Lighting.EnvironmentSpecularScale = 1
 

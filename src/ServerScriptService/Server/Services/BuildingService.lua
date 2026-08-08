@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local BuildingConfig = require(ReplicatedStorage.Shared.Config.BuildingConfig)
 local PersonalBaseConfig = require(ReplicatedStorage.Shared.Config.PersonalBaseConfig)
 local BaseSessionTypes = require(ReplicatedStorage.Shared.Config.BaseSessionTypes)
@@ -29,6 +30,12 @@ local InventoryService = require(script.Parent.InventoryService)
 local CurrencyService = require(script.Parent.CurrencyService)
 
 local BuildingService = {}
+
+-- Fired only after the structure exists in the session and its cost has been
+-- charged — never on a rejected request. Both cover the freeform and blueprint
+-- build paths, so a consumer never has to know which one the player used.
+BuildingService.StructureBuilt = Signal.new() -- (player, buildingId, structureId)
+BuildingService.StructureUpgraded = Signal.new() -- (player, newBuildingId, structureId)
 
 local function withinBounds(localCFrame: CFrame): boolean
 	local pos = localCFrame.Position
@@ -194,6 +201,7 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 	BaseService.AddInvestment(player.UserId, points)
 
 	spawnStructurePart(player.UserId, structure)
+	BuildingService.StructureBuilt:Fire(player, definition.Id, structureId)
 	BaseService.BroadcastState(player.UserId)
 
 	return true, structureId
@@ -310,6 +318,7 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 	BaseService.AddInvestment(player.UserId, points)
 
 	spawnStructurePart(player.UserId, structure)
+	BuildingService.StructureBuilt:Fire(player, definition.Id, structureId)
 	BaseService.BroadcastState(player.UserId)
 
 	return true, structureId
@@ -387,6 +396,7 @@ local function requestUpgradeBuilding(player: Player, payload: { StructureId: st
 	BaseService.AddInvestment(player.UserId, points)
 
 	spawnStructurePart(player.UserId, structure)
+	BuildingService.StructureUpgraded:Fire(player, nextDef.Id, payload.StructureId)
 	BaseService.BroadcastState(player.UserId)
 	return true
 end

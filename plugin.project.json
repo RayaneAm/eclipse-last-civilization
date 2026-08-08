@@ -1,0 +1,9 @@
+{
+  "name": "EclipseWorldBuilder",
+  "tree": {
+    "$path": "plugin/EclipseWorldBuilderPlugin.server.lua",
+    "Modules": {
+      "$path": "plugin/Modules"
+    }
+  }
+}

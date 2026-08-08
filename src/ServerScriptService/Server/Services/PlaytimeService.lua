@@ -1,8 +1,8 @@
 --!strict
 -- Phase 3B: minimal, single-purpose DataStore tracking cumulative playtime
--- per player — the ONE piece of real cross-session persistence this project
--- has (everything else, e.g. PlayerSessionService, is explicitly in-memory
--- only and dropped on leave). Exists solely so the Starter Pack promo's
+-- per player. This remains independent from the later narrow canonical
+-- PlayerSession profile because it accumulates elapsed playtime for the
+-- Starter Pack gate. Exists solely so the Starter Pack promo's
 -- "under 30 total hours played" gate is actually correct across sessions
 -- instead of a session-only guess — confirmed as the right tradeoff during
 -- planning. Not a general player-data/profile system; do not extend this

@@ -17,12 +17,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local PortalDestinationConfig = require(ReplicatedStorage.Shared.Config.PortalDestinationConfig)
 local ProgressionService = require(script.Parent.ProgressionService)
 local BaseService = require(script.Parent.BaseService)
 local BasePermissionService = require(script.Parent.BasePermissionService)
 
 local PortalService = {}
+
+-- Fired only on a teleport that actually landed (authorized, not cooled down,
+-- not aborted mid-transition). Kept as two directional Signals rather than one
+-- "travelled" event because a consumer counting expeditions has to be able to
+-- tell an outbound trip from the trip home — see DailyQuestService, which pairs
+-- them into a round trip so RequestPortalReturn alone can never be farmed.
+PortalService.DestinationEntered = Signal.new() -- (player, portalId, kind)
+PortalService.ReturnedToHaven = Signal.new() -- (player, portalId, kind)
 
 local COOLDOWN_SECONDS = 2
 local TRANSITION_HOLD_SECONDS = 0.35 -- lets the fade-to-black actually read, and gives an in-flight death/leave a moment to be caught
@@ -129,6 +138,14 @@ local function performTeleport(player: Player, destination: PortalDestinationCon
 	return true, nil
 end
 
+function PortalService.TeleportToHavenArrival(player: Player): (boolean, string?)
+	local destination = PortalDestinationConfig.Get("Tutorial")
+	if not destination then
+		return false, "UnknownPortal"
+	end
+	return performTeleport(player, destination, destination.returnAnchorName, "Entering Survivor Haven...")
+end
+
 local function travel(player: Player, portalId: string): (boolean, string?)
 	if typeof(portalId) ~= "string" then
 		return false, "InvalidPortal"
@@ -157,7 +174,11 @@ local function travel(player: Player, portalId: string): (boolean, string?)
 		return false, reason
 	end
 
-	return performTeleport(player, destination, destination.arrivalAnchorName, destination.loadingText)
+	local ok, failure = performTeleport(player, destination, destination.arrivalAnchorName, destination.loadingText)
+	if ok then
+		PortalService.DestinationEntered:Fire(player, destination.id, destination.kind)
+	end
+	return ok, failure
 end
 
 -- No tier check — the player is already standing in the destination, so
@@ -173,7 +194,11 @@ local function returnToHaven(player: Player, portalId: string): (boolean, string
 		return false, "UnknownPortal"
 	end
 
-	return performTeleport(player, destination, destination.returnAnchorName, "Returning to Survivor Haven...")
+	local ok, failure = performTeleport(player, destination, destination.returnAnchorName, "Returning to Survivor Haven...")
+	if ok then
+		PortalService.ReturnedToHaven:Fire(player, destination.id, destination.kind)
+	end
+	return ok, failure
 end
 
 function PortalService:Init()

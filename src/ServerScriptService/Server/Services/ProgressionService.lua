@@ -29,6 +29,7 @@ function ProgressionService.SetTier(player: Player, tier: number)
 	end
 	local previousTier = session.Progression.Tier
 	session.Progression.Tier = tier
+	PlayerSessionService.MarkDirty(player)
 	print(`[ProgressionService] {player.Name} Progression.Tier {previousTier} -> {tier}`)
 	ProgressionService.TierChanged:Fire(player, tier, previousTier)
 	Net.GetEvent("ProgressionChanged"):FireClient(player, tier)
@@ -62,6 +63,7 @@ function ProgressionService.AddXP(player: Player, amount: number)
 	if not threshold then
 		progression.XP = 0 -- max tier reached; nothing further to accumulate toward
 	end
+	PlayerSessionService.MarkDirty(player)
 
 	local nextThreshold = XPConfig.ThresholdForTier(progression.Tier)
 	print(

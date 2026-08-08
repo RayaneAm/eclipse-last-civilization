@@ -504,32 +504,6 @@ local function buildNuclearThreshold(parent: Instance, anchorCFrame: CFrame, lay
 			Parent = parent,
 		})
 
-		-- A compact warning pylon lamp at the far edge of the pre-stair zone.
-		local pylonPos = anchorCFrame * CFrame.new(sign * halfWidth * 0.85, 0, layout.TotalDepth + 1)
-		GeneratorKit.NewPart({
-			Name = "WarningPylon",
-			Size = Vector3.new(0.6, 2.6, 0.6),
-			CFrame = pylonPos * CFrame.new(0, 1.3, 0),
-			Material = Enum.Material.Metal,
-			Color = Color3.fromRGB(50, 50, 54),
-			Parent = parent,
-		})
-		local pylonLight = GeneratorKit.NewPart({
-			Name = "WarningPylonLamp",
-			Size = Vector3.new(0.7, 0.4, 0.7),
-			CFrame = pylonPos * CFrame.new(0, 2.6, 0),
-			Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(255, 200, 40),
-			CanCollide = false,
-			Parent = parent,
-		})
-		local lampLight = Instance.new("PointLight")
-		lampLight.Color = Color3.fromRGB(255, 190, 40)
-		lampLight.Brightness = 1.6
-		lampLight.Range = 12
-		lampLight.Parent = pylonLight
-		CollectionService:AddTag(lampLight, "AmbientFlicker")
-
 		-- Subtle toxic stain near the portal (strongest tier).
 		local stainZ = layout.StairRunDepth * 0.15
 		GeneratorKit.NewPart({

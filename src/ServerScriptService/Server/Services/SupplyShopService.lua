@@ -8,6 +8,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local SupplyShopConfig = require(ReplicatedStorage.Shared.Config.SupplyShopConfig)
 local BiomeConfig = require(ReplicatedStorage.Shared.Config.BiomeConfig)
 
@@ -17,6 +18,10 @@ local CurrencyService = require(script.Parent.CurrencyService)
 local ProgressionService = require(script.Parent.ProgressionService)
 
 local SupplyShopService = {}
+
+-- Fired only after every requirement check passed and the purchase was
+-- actually charged and delivered.
+SupplyShopService.ItemPurchased = Signal.new() -- (player, itemId)
 
 -- Mirrors BiomeGateService's own (private) buildStatusFor logic — "biome
 -- unlocked" is just tier >= biome.unlockTier — rather than depending on a
@@ -76,6 +81,7 @@ local function requestPurchase(player: Player, payload: { ItemId: string }): (bo
 	end
 	InventoryService.AddItem(player, item.Id, 1)
 
+	SupplyShopService.ItemPurchased:Fire(player, item.Id)
 	return true
 end
 

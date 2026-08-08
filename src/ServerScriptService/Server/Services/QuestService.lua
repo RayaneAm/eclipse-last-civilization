@@ -15,8 +15,11 @@ local InventoryService = require(script.Parent.InventoryService)
 local CraftingService = require(script.Parent.CraftingService)
 local ProgressionService = require(script.Parent.ProgressionService)
 local CurrencyService = require(script.Parent.CurrencyService)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 
 local QuestService = {}
+
+QuestService.QuestCompleted = Signal.new() -- (player, questId)
 
 local function pushUpdate(player: Player, state: PlayerSessionTypes.QuestState)
 	Net.GetEvent("QuestUpdated"):FireClient(player, state)
@@ -56,9 +59,12 @@ local function advanceIfObjectiveComplete(player: Player)
 		-- previously-debugged fallback invariant — never remove it.
 		ProgressionService.AddXP(player, quest.rewardXP)
 		ProgressionService.SetTier(player, quest.rewardTier)
+		PlayerSessionService.MarkDirty(player)
+		QuestService.QuestCompleted:Fire(player, quest.id)
 	else
 		state.ObjectiveIndex += 1
 		state.ObjectiveProgress = 0
+		PlayerSessionService.MarkDirty(player)
 		local nextObjective = quest.objectives[state.ObjectiveIndex]
 		print(`[QuestService] {player.Name} advanced "{quest.name}" to objective {state.ObjectiveIndex}/{#quest.objectives}: {if nextObjective then nextObjective.description else "?"}`)
 	end
