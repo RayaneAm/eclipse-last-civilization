@@ -55,13 +55,12 @@ local Theme = {
 	},
 }
 
-local SETTINGS_WINDOW_WIDTH = 580
-local SETTINGS_TAB_HEIGHTS = {
-	Audio = 420,
-	Gameplay = 480,
-	Interface = 370,
-}
-local SETTINGS_FOOTER_HEIGHT = 52
+local SETTINGS_DEFAULT_WIDTH = 620
+local SETTINGS_MIN_WIDTH = 560
+local SETTINGS_MAX_WIDTH = 660
+local SETTINGS_WINDOW_HEIGHT = 500
+local SETTINGS_FOOTER_HEIGHT = 44
+local SETTINGS_OUTER_PADDING = 20
 
 local function new(className: string, properties: {[string]: any}?)
 	local object = Instance.new(className)
@@ -192,61 +191,58 @@ local backdrop = new("TextButton", {
 	ZIndex = 1,
 })
 
-local windowShadow = new("Frame", {
-	Name = "WindowShadow",
-	Parent = backdrop,
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.new(0.5, 7, 0.46, 9),
-	Size = UDim2.fromOffset(SETTINGS_WINDOW_WIDTH, SETTINGS_TAB_HEIGHTS.Audio),
-	BackgroundColor3 = Color3.new(0, 0, 0),
-	BackgroundTransparency = 0.45,
-	BorderSizePixel = 0,
-	ZIndex = 2,
-})
-corner(windowShadow, 20)
-
-new("UISizeConstraint", {
-	Parent = windowShadow,
-	MinSize = Vector2.new(320, 360),
-	MaxSize = Vector2.new(SETTINGS_WINDOW_WIDTH, SETTINGS_TAB_HEIGHTS.Gameplay),
-})
-
 local window = new("Frame", {
 	Name = "Window",
 	Parent = backdrop,
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.46),
-	Size = UDim2.fromOffset(SETTINGS_WINDOW_WIDTH, SETTINGS_TAB_HEIGHTS.Audio),
+	Size = UDim2.fromOffset(SETTINGS_DEFAULT_WIDTH, SETTINGS_WINDOW_HEIGHT),
 	BackgroundColor3 = Theme.Colors.Panel,
 	BackgroundTransparency = 0.08,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
+	Active = true,
 	SelectionGroup = true,
 	ZIndex = 3,
 })
 corner(window, 20)
 
-local outerStroke = stroke(window, 2, Theme.Colors.Stroke, 0.05)
-new("UIGradient", {
-	Parent = outerStroke,
-	Rotation = 18,
-	Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Theme.Colors.PurpleBright),
-		ColorSequenceKeypoint.new(0.55, Theme.Colors.Purple),
-		ColorSequenceKeypoint.new(1, Theme.Colors.Orange),
-	}),
+-- Keep the modal outline inset so UIStroke never paints outside the rounded
+-- clipping frame. This mirrors the Backpack's single, intentional outline.
+local innerBorder = new("Frame", {
+	Name = "InnerBorder",
+	Parent = window,
+	Position = UDim2.fromOffset(3, 3),
+	Size = UDim2.new(1, -6, 1, -6),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	Active = false,
+	ZIndex = 20,
 })
+corner(innerBorder, 16)
+stroke(innerBorder, 1, Theme.Colors.Stroke, 0.12)
 
 new("UISizeConstraint", {
 	Parent = window,
-	MinSize = Vector2.new(320, 360),
-	MaxSize = Vector2.new(SETTINGS_WINDOW_WIDTH, SETTINGS_TAB_HEIGHTS.Gameplay),
+	MinSize = Vector2.new(SETTINGS_MIN_WIDTH, SETTINGS_WINDOW_HEIGHT),
+	MaxSize = Vector2.new(SETTINGS_MAX_WIDTH, SETTINGS_WINDOW_HEIGHT),
 })
 
 local windowScale
-local shadowScale
 local settingsBaseScale = 1
-local currentWindowHeight = SETTINGS_TAB_HEIGHTS.Audio
+
+local function getResponsiveWindowWidth(viewportWidth: number): number
+	if viewportWidth >= 1800 then
+		return SETTINGS_MAX_WIDTH
+	elseif viewportWidth >= 1450 then
+		return 640
+	elseif viewportWidth >= 1100 then
+		return SETTINGS_DEFAULT_WIDTH
+	end
+	-- Preserve the modal's internal proportions and scale the whole surface on
+	-- small displays instead of squeezing individual controls into each other.
+	return SETTINGS_MIN_WIDTH
+end
 
 local function updateWindowPosition()
 	local camera = Workspace.CurrentCamera
@@ -255,16 +251,17 @@ local function updateWindowPosition()
 	end
 	local viewport = camera.ViewportSize
 	local yScale = if viewport.Y < 760 then 0.52 else 0.46
+	local responsiveWidth = getResponsiveWindowWidth(viewport.X)
+	local responsiveSize = UDim2.fromOffset(responsiveWidth, SETTINGS_WINDOW_HEIGHT)
+	window.Size = responsiveSize
 	settingsBaseScale = math.clamp(
-		math.min(viewport.X / (SETTINGS_WINDOW_WIDTH + 56), (viewport.Y - 48) / (currentWindowHeight + 48)),
+		math.min(viewport.X / (responsiveWidth + 24), (viewport.Y - 48) / (SETTINGS_WINDOW_HEIGHT + 48)),
 		0.55,
 		1
 	)
 	window.Position = UDim2.fromScale(0.5, yScale)
-	windowShadow.Position = UDim2.new(0.5, 7, yScale, 9)
-	if windowScale and shadowScale then
+	if windowScale then
 		windowScale.Scale = settingsBaseScale
-		shadowScale.Scale = settingsBaseScale
 	end
 end
 
@@ -278,39 +275,36 @@ windowScale = new("UIScale", {
 	Parent = window,
 	Scale = 1,
 })
-
-shadowScale = new("UIScale", {
-	Parent = windowShadow,
-	Scale = 1,
-})
 updateWindowPosition()
 
 local topDecor = new("Frame", {
 	Name = "TopDecor",
 	Parent = window,
-	Size = UDim2.new(1, 0, 0, 4),
+	Position = UDim2.fromOffset(18, 2),
+	Size = UDim2.new(1, -36, 0, 2),
 	BackgroundColor3 = Theme.Colors.Purple,
 	BorderSizePixel = 0,
-	ZIndex = 4,
+	ZIndex = 21,
 })
+corner(topDecor, 1)
 new("UIGradient", {
 	Parent = topDecor,
 	Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Theme.Colors.Purple),
-		ColorSequenceKeypoint.new(0.65, Theme.Colors.Cyan),
-		ColorSequenceKeypoint.new(1, Theme.Colors.Orange),
+		ColorSequenceKeypoint.new(0, Theme.Colors.PurpleDark),
+		ColorSequenceKeypoint.new(0.62, Theme.Colors.PurpleBright),
+		ColorSequenceKeypoint.new(1, Theme.Colors.Cyan),
 	}),
 })
 
 local header = new("Frame", {
 	Name = "Header",
 	Parent = window,
-	Position = UDim2.fromOffset(0, 4),
+	Position = UDim2.fromOffset(0, 6),
 	Size = UDim2.new(1, 0, 0, 88),
 	BackgroundTransparency = 1,
 	ZIndex = 4,
 })
-padding(header, 20, 20, 12, 8)
+padding(header, SETTINGS_OUTER_PADDING, SETTINGS_OUTER_PADDING, 10, 8)
 
 makeText({
 	Name = "Eyebrow",
@@ -319,7 +313,8 @@ makeText({
 	Size = UDim2.new(1, -74, 0, 16),
 	Text = "PLAYER CONFIGURATION",
 	TextColor3 = Theme.Colors.Muted,
-	TextSize = 11,
+	TextTransparency = 0.25,
+	TextSize = 10,
 	Font = Theme.Fonts.BodyMedium,
 	ZIndex = 5,
 })
@@ -349,68 +344,33 @@ makeText({
 	ZIndex = 5,
 })
 
--- Compact close control: quiet by default, red only as a hover/close cue.
-local closeGlow = new("Frame", {
-	Name = "CloseGlow",
+-- Same single-surface close treatment used by Backpack: one rounded button and
+-- one stroke, with red reserved for the close affordance and hover state.
+local closeButton = makeText({
+	ClassName = "TextButton",
+	Name = "CloseButton",
 	Parent = header,
 	AnchorPoint = Vector2.new(1, 0),
 	Position = UDim2.new(1, 0, 0, 0),
 	Size = UDim2.fromOffset(44, 44),
-	BackgroundColor3 = Theme.Colors.PanelSoft,
-	BackgroundTransparency = 0,
-	BorderSizePixel = 0,
-	ZIndex = 5,
-})
-corner(closeGlow, 8)
-
-local closeOuter = new("Frame", {
-	Name = "CloseOuter",
-	Parent = closeGlow,
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(42, 42),
-	BackgroundColor3 = Theme.Colors.PanelSoft,
-	BorderSizePixel = 0,
-	ZIndex = 6,
-})
-corner(closeOuter, 5)
-
-local closeBorder = new("Frame", {
-	Name = "CloseBorder",
-	Parent = closeOuter,
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.new(1, -2, 1, -2),
-	BackgroundColor3 = Theme.Colors.Red,
-	BorderSizePixel = 0,
-	ZIndex = 7,
-})
-corner(closeBorder, 3)
-
-local closeButton = makeText({
-	ClassName = "TextButton",
-	Name = "CloseButton",
-	Parent = closeBorder,
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.new(1, -2, 1, -2),
 	BackgroundTransparency = 0,
 	Text = "X",
 	TextColor3 = Theme.Colors.Red,
-	TextSize = 27,
-	Font = Theme.Fonts.Body,
+	TextSize = 18,
+	Font = Theme.Fonts.Heading,
 	TextXAlignment = Enum.TextXAlignment.Center,
 	AutoButtonColor = false,
-	ZIndex = 8,
+	ZIndex = 6,
 })
-closeButton.BackgroundColor3 = Theme.Colors.Panel
-corner(closeButton, 2)
+closeButton.BackgroundColor3 = Theme.Colors.PanelSoft
+corner(closeButton, 10)
+local closeButtonStroke = stroke(closeButton, 1, Theme.Colors.Red, 0.42)
 
 local tabs = new("Frame", {
 	Name = "Tabs",
 	Parent = window,
-	Position = UDim2.fromOffset(20, 92),
-	Size = UDim2.new(1, -40, 0, 40),
+	Position = UDim2.fromOffset(SETTINGS_OUTER_PADDING, 100),
+	Size = UDim2.new(1, -(SETTINGS_OUTER_PADDING * 2), 0, 38),
 	BackgroundTransparency = 1,
 	ZIndex = 4,
 })
@@ -427,8 +387,13 @@ new("UIListLayout", {
 local pageHolder = new("Frame", {
 	Name = "PageHolder",
 	Parent = window,
-	Position = UDim2.fromOffset(20, 140),
-	Size = UDim2.new(1, -40, 1, -(140 + SETTINGS_FOOTER_HEIGHT)),
+	Position = UDim2.fromOffset(SETTINGS_OUTER_PADDING, 148),
+	Size = UDim2.new(
+		1,
+		-(SETTINGS_OUTER_PADDING * 2),
+		1,
+		-(148 + SETTINGS_FOOTER_HEIGHT + 12)
+	),
 	BackgroundColor3 = Theme.Colors.PanelSoft,
 	BackgroundTransparency = 0.18,
 	BorderSizePixel = 0,
@@ -441,40 +406,20 @@ stroke(pageHolder, 1, Theme.Colors.Divider, 0.22)
 local pages = {}
 local tabButtons = {}
 local selectedTab = "Audio"
-local activeWindowResizeTween = nil
-local activeShadowResizeTween = nil
-
-local function resizeForTab(name: string)
-	local targetHeight = SETTINGS_TAB_HEIGHTS[name] or SETTINGS_TAB_HEIGHTS.Audio
-	currentWindowHeight = targetHeight
-	updateWindowPosition()
-	local targetSize = UDim2.fromOffset(SETTINGS_WINDOW_WIDTH, targetHeight)
-
-	if activeWindowResizeTween then
-		activeWindowResizeTween:Cancel()
-	end
-	if activeShadowResizeTween then
-		activeShadowResizeTween:Cancel()
-	end
-
-	if backdrop.Visible then
-		activeWindowResizeTween = tween(window, 0.16, { Size = targetSize })
-		activeShadowResizeTween = tween(windowShadow, 0.16, { Size = targetSize })
-	else
-		window.Size = targetSize
-		windowShadow.Size = targetSize
-	end
-end
 
 local function createPage(name: string)
 	local page = new("ScrollingFrame", {
 		Name = name .. "Page",
 		Parent = pageHolder,
-		Size = UDim2.fromScale(1, 1),
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.new(1, -8, 1, -8),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 3,
-		ScrollBarImageColor3 = Theme.Colors.Purple,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = Theme.Colors.Muted:Lerp(Theme.Colors.Purple, 0.35),
+		ScrollBarImageTransparency = 0.5,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.fromOffset(0, 0),
 		Visible = false,
@@ -557,7 +502,7 @@ local function createSettingCard(
 		Name = title:gsub("%s+", "") .. "Card",
 		Parent = parent,
 		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, if hasDescription then 58 else 48),
+		Size = UDim2.new(1, 0, 0, 60),
 		BackgroundColor3 = Theme.Colors.PanelSoft,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -569,8 +514,8 @@ local function createSettingCard(
 		Name = "Divider",
 		Parent = card,
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 1),
+		Position = UDim2.new(0, 8, 1, 0),
+		Size = UDim2.new(1, -16, 0, 1),
 		BackgroundColor3 = Theme.Colors.Divider,
 		BackgroundTransparency = 0.3,
 		BorderSizePixel = 0,
@@ -580,8 +525,8 @@ local function createSettingCard(
 	makeText({
 		Name = "SettingTitle",
 		Parent = card,
-		Position = UDim2.fromOffset(6, if hasDescription then 3 else 0),
-		Size = UDim2.new(1, -176, if hasDescription then 0 else 1, if hasDescription then 22 else 0),
+		Position = UDim2.fromOffset(8, if hasDescription then 7 else 0),
+		Size = UDim2.new(1, -248, if hasDescription then 0 else 1, if hasDescription then 20 else 0),
 		Text = title,
 		TextColor3 = Theme.Colors.White,
 		TextSize = 15,
@@ -592,8 +537,8 @@ local function createSettingCard(
 	makeText({
 		Name = "SettingDescription",
 		Parent = card,
-		Position = UDim2.fromOffset(6, 24),
-		Size = UDim2.new(1, -176, 0, 25),
+		Position = UDim2.fromOffset(8, 28),
+		Size = UDim2.new(1, -248, 0, 24),
 		Text = description,
 		TextColor3 = Theme.Colors.Muted:Lerp(Theme.Colors.Text, 0.32),
 		TextSize = 12,
@@ -611,7 +556,17 @@ local function createSettingCard(
 		tween(card, 0.12, { BackgroundTransparency = 1 })
 	end)
 
-	return card
+	local controlArea = new("Frame", {
+		Name = "ControlArea",
+		Parent = card,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -8, 0, 0),
+		Size = UDim2.new(0, 224, 1, -1),
+		BackgroundTransparency = 1,
+		ZIndex = 7,
+	})
+
+	return card, controlArea
 end
 
 local function createToggle(
@@ -621,13 +576,13 @@ local function createToggle(
 	description: string,
 	order: number
 )
-	local card = createSettingCard(parent, title, description, order)
+	local card, controlArea = createSettingCard(parent, title, description, order)
 
 	local toggle = new("TextButton", {
 		Name = "Toggle",
-		Parent = card,
+		Parent = controlArea,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -6, 0.5, 0),
+		Position = UDim2.fromScale(1, 0.5),
 		Size = UDim2.fromOffset(50, 26),
 		BackgroundColor3 = Theme.Colors.Disabled,
 		BorderSizePixel = 0,
@@ -649,20 +604,6 @@ local function createToggle(
 	})
 	corner(knob, 10)
 
-	local status = makeText({
-		Name = "Status",
-		Parent = card,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -66, 0.5, 0),
-		Size = UDim2.fromOffset(38, 18),
-		Text = "",
-		TextColor3 = Theme.Colors.Muted,
-		TextSize = 10,
-		Font = Theme.Fonts.BodyMedium,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		ZIndex = 9,
-	})
-
 	local function render(animated: boolean)
 		local enabled = values[key]
 		local targetPosition = if enabled
@@ -672,11 +613,6 @@ local function createToggle(
 		local targetColor = if enabled
 			then Theme.Colors.Purple
 			else Theme.Colors.Disabled
-
-		status.Text = if enabled then "ON" else "OFF"
-		status.TextColor3 = if enabled
-			then Theme.Colors.PurpleBright
-			else Theme.Colors.Muted
 
 		if animated then
 			tween(
@@ -711,15 +647,15 @@ local function createSlider(
 	initialValue: number,
 	order: number
 )
-	local card = createSettingCard(parent, title, description, order)
+	local card, controlArea = createSettingCard(parent, title, description, order)
 	local startingValue = values[key] or initialValue
 	values[key] = startingValue
 
 	local percentage = makeText({
 		Name = "Percentage",
-		Parent = card,
+		Parent = controlArea,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -6, 0.5, 0),
+		Position = UDim2.fromScale(1, 0.5),
 		Size = UDim2.fromOffset(50, 20),
 		Text = tostring(math.round(startingValue * 100)) .. "%",
 		TextColor3 = Theme.Colors.White,
@@ -731,9 +667,9 @@ local function createSlider(
 
 	local track = new("TextButton", {
 		Name = "SliderTrack",
-		Parent = card,
+		Parent = controlArea,
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -66, 0.5, 0),
+		Position = UDim2.new(1, -62, 0.5, 0),
 		Size = UDim2.fromOffset(160, 8),
 		BackgroundColor3 = Theme.Colors.Divider,
 		BorderSizePixel = 0,
@@ -908,7 +844,6 @@ autoSaveAllSettings()
 
 local function selectTab(name: string)
 	selectedTab = name
-	resizeForTab(name)
 
 	for pageName, page in pairs(pages) do
 		page.Visible = pageName == name
@@ -1018,7 +953,7 @@ local footer = new("Frame", {
 	Position = UDim2.new(0, 0, 1, 0),
 	Size = UDim2.new(1, 0, 0, SETTINGS_FOOTER_HEIGHT),
 	BackgroundColor3 = Theme.Colors.PanelSoft,
-	BackgroundTransparency = 0.05,
+	BackgroundTransparency = 0.35,
 	BorderSizePixel = 0,
 	ZIndex = 5,
 })
@@ -1026,7 +961,8 @@ local footer = new("Frame", {
 new("Frame", {
 	Name = "Divider",
 	Parent = footer,
-	Size = UDim2.new(1, 0, 0, 1),
+	Position = UDim2.fromOffset(SETTINGS_OUTER_PADDING, 0),
+	Size = UDim2.new(1, -(SETTINGS_OUTER_PADDING * 2), 0, 1),
 	BackgroundColor3 = Theme.Colors.Divider,
 	BorderSizePixel = 0,
 	ZIndex = 6,
@@ -1037,30 +973,20 @@ local resetButton = makeText({
 	Name = "ResetButton",
 	Parent = footer,
 	AnchorPoint = Vector2.new(1, 0.5),
-	Position = UDim2.new(1, -18, 0.5, 0),
-	Size = UDim2.fromOffset(132, 32),
-	BackgroundTransparency = 1,
+	Position = UDim2.new(1, -SETTINGS_OUTER_PADDING, 0.5, 0),
+	Size = UDim2.fromOffset(124, 28),
+	BackgroundTransparency = 0.68,
 	Text = "Reset to defaults",
 	TextColor3 = Theme.Colors.Muted,
-	TextSize = 11,
+	TextSize = 10,
 	Font = Theme.Fonts.Button,
 	TextXAlignment = Enum.TextXAlignment.Center,
 	AutoButtonColor = false,
 	ZIndex = 7,
 })
+resetButton.BackgroundColor3 = Theme.Colors.Card
 corner(resetButton, 7)
-
-makeText({
-	Name = "AutoSaveStatus",
-	Parent = footer,
-	Position = UDim2.new(0, 18, 0, 0),
-	Size = UDim2.new(1, -180, 1, 0),
-	Text = "CHANGES SAVE AUTOMATICALLY",
-	TextColor3 = Theme.Colors.Muted:Lerp(Theme.Colors.Text, 0.18),
-	TextSize = 10,
-	Font = Theme.Fonts.BodyMedium,
-	ZIndex = 7,
-})
+local resetButtonStroke = stroke(resetButton, 1, Theme.Colors.Divider, 0.52)
 
 local resetConfirmation = new("TextButton", {
 	Name = "ResetConfirmation",
@@ -1085,6 +1011,7 @@ local resetPrompt = new("Frame", {
 	Size = UDim2.fromOffset(360, 164),
 	BackgroundColor3 = Theme.Colors.PanelSoft,
 	BorderSizePixel = 0,
+	Active = true,
 	ZIndex = 31,
 })
 corner(resetPrompt, 12)
@@ -1217,21 +1144,14 @@ local function setOpen(open: boolean)
 	openButton.Visible = not open
 
 	if open then
-		resizeForTab(selectedTab)
+		updateWindowPosition()
 		backdrop.Visible = true
 		backdrop.BackgroundTransparency = 1
 		windowScale.Scale = settingsBaseScale * 0.98
-		shadowScale.Scale = settingsBaseScale * 0.98
 
 		playMenuTween(backdrop, 0.18, { BackgroundTransparency = 0.45 })
 		playMenuTween(
 			windowScale,
-			0.22,
-			{ Scale = settingsBaseScale },
-			Enum.EasingStyle.Back
-		)
-		playMenuTween(
-			shadowScale,
 			0.22,
 			{ Scale = settingsBaseScale },
 			Enum.EasingStyle.Back
@@ -1247,15 +1167,6 @@ local function setOpen(open: boolean)
 			Enum.EasingStyle.Quad,
 			Enum.EasingDirection.In
 		)
-
-		playMenuTween(
-			shadowScale,
-			0.15,
-			{ Scale = settingsBaseScale * 0.98 },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-
 		closing.Completed:Once(function()
 			if not menuOpen then
 				backdrop.Visible = false
@@ -1271,6 +1182,9 @@ local function registerWithMenuController()
 		local eclipseUI = (_G :: any).EclipseUI
 		if eclipseUI and type(eclipseUI.RegisterPanel) == "function" then
 			eclipseUI.RegisterPanel("Settings", {
+				GetGuiObject = function()
+					return window
+				end,
 				Open = function()
 					setOpen(true)
 				end,
@@ -1332,12 +1246,21 @@ closeButton.Activated:Connect(function()
 	end
 end)
 
-backdrop.Activated:Connect(function()
-	requestPanelClose()
-end)
+local function isInsideGuiObject(screenPosition: Vector3, guiObject: GuiObject): boolean
+	local objectPosition = guiObject.AbsolutePosition
+	local objectSize = guiObject.AbsoluteSize
+	return screenPosition.X >= objectPosition.X
+		and screenPosition.X <= objectPosition.X + objectSize.X
+		and screenPosition.Y >= objectPosition.Y
+		and screenPosition.Y <= objectPosition.Y + objectSize.Y
+end
 
-window.InputBegan:Connect(function()
-	-- Voorkomt dat klikken binnen het venster doorvalt naar de backdrop.
+backdrop.InputBegan:Connect(function(input)
+	local isPrimaryPointer = input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+	if menuOpen and isPrimaryPointer and not isInsideGuiObject(input.Position, window) then
+		requestPanelClose()
+	end
 end)
 
 resetButton.Activated:Connect(function()
@@ -1354,8 +1277,12 @@ cancelResetButton.Activated:Connect(function()
 	end
 end)
 
-resetConfirmation.Activated:Connect(function()
-	setResetConfirmationVisible(false)
+resetConfirmation.InputBegan:Connect(function(input)
+	local isPrimaryPointer = input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+	if isPrimaryPointer and not isInsideGuiObject(input.Position, resetPrompt) then
+		setResetConfirmationVisible(false)
+	end
 end)
 
 confirmResetButton.Activated:Connect(function()
@@ -1420,16 +1347,32 @@ for _, button in ipairs({
 end
 
 resetButton.MouseEnter:Connect(function()
-	tween(resetButton, 0.12, { TextColor3 = Theme.Colors.Text })
+	tween(resetButton, 0.12, {
+		BackgroundTransparency = 0.38,
+		TextColor3 = Theme.Colors.Text,
+	})
+	tween(resetButtonStroke, 0.12, { Transparency = 0.25 })
 end)
 resetButton.MouseLeave:Connect(function()
-	tween(resetButton, 0.12, { TextColor3 = Theme.Colors.Muted })
+	tween(resetButton, 0.12, {
+		BackgroundTransparency = 0.68,
+		TextColor3 = Theme.Colors.Muted,
+	})
+	tween(resetButtonStroke, 0.12, { Transparency = 0.52 })
 end)
 resetButton.SelectionGained:Connect(function()
-	tween(resetButton, 0.12, { TextColor3 = Theme.Colors.Text })
+	tween(resetButton, 0.12, {
+		BackgroundTransparency = 0.38,
+		TextColor3 = Theme.Colors.Text,
+	})
+	tween(resetButtonStroke, 0.12, { Transparency = 0.25 })
 end)
 resetButton.SelectionLost:Connect(function()
-	tween(resetButton, 0.12, { TextColor3 = Theme.Colors.Muted })
+	tween(resetButton, 0.12, {
+		BackgroundTransparency = 0.68,
+		TextColor3 = Theme.Colors.Muted,
+	})
+	tween(resetButtonStroke, 0.12, { Transparency = 0.52 })
 end)
 
 openButton.MouseEnter:Connect(function()
@@ -1478,22 +1421,26 @@ closeButton.MouseEnter:Connect(function()
 		BackgroundColor3 = Theme.Colors.Red,
 		TextColor3 = Theme.Colors.White,
 	})
+	tween(closeButtonStroke, 0.12, { Transparency = 0.08 })
 end)
 closeButton.MouseLeave:Connect(function()
 	tween(closeButton, 0.12, {
-		BackgroundColor3 = Theme.Colors.Panel,
+		BackgroundColor3 = Theme.Colors.PanelSoft,
 		TextColor3 = Theme.Colors.Red,
 	})
+	tween(closeButtonStroke, 0.12, { Transparency = 0.42 })
 end)
 closeButton.SelectionGained:Connect(function()
 	tween(closeButton, 0.12, {
 		BackgroundColor3 = Theme.Colors.Red,
 		TextColor3 = Theme.Colors.White,
 	})
+	tween(closeButtonStroke, 0.12, { Transparency = 0.08 })
 end)
 closeButton.SelectionLost:Connect(function()
 	tween(closeButton, 0.12, {
-		BackgroundColor3 = Theme.Colors.Panel,
+		BackgroundColor3 = Theme.Colors.PanelSoft,
 		TextColor3 = Theme.Colors.Red,
 	})
+	tween(closeButtonStroke, 0.12, { Transparency = 0.42 })
 end)

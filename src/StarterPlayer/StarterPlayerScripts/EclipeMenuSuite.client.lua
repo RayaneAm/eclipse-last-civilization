@@ -975,8 +975,10 @@ end
 
 local render
 local activeScreen = nil
+local activeModalState = nil
 local externalPanels = {}
 local panelChangedEvent = Instance.new("BindableEvent")
+local modalChangedEvent = Instance.new("BindableEvent")
 
 local SCREEN_META = {
 	Shop = {title = "SURVIVOR SHOP", kicker = "PREMIUM // DIRECT PURCHASES", icon = "S", accent = C.Purple},
@@ -1000,6 +1002,17 @@ local function setActiveScreen(which)
 	end
 	activeScreen = which
 	panelChangedEvent:Fire(which, which ~= nil)
+end
+
+-- Authoritative modal-session state. Unlike activeScreen (the content that is
+-- currently rendered), this changes directly from one requested panel to the
+-- next and only becomes nil after the final close transition completes.
+local function setActiveModalState(which)
+	if activeModalState == which then
+		return
+	end
+	activeModalState = which
+	modalChangedEvent:Fire(which, which ~= nil)
 end
 
 local function bindResponsiveGrid(list, layout, cellHeight, maximumColumns)
@@ -1605,6 +1618,7 @@ local function openPanel(which)
 	end
 
 	desiredScreen = which
+	setActiveModalState(which)
 	setInputLocked(true)
 	transitionToken += 1
 	local token = transitionToken
@@ -1741,7 +1755,7 @@ local function openPanel(which)
 end
 
 local function closeCurrentPanel()
-	if not activeScreen and not dim.Visible then return end
+	if not activeModalState and not activeScreen and not dim.Visible then return end
 
 	desiredScreen = nil
 	transitionToken += 1
@@ -1754,6 +1768,7 @@ local function closeCurrentPanel()
 		task.delay(0.15, function()
 			if token == transitionToken and desiredScreen == nil then
 				setActiveScreen(nil)
+				setActiveModalState(nil)
 				setInputLocked(false)
 				panelTransitioning = false
 			end
@@ -1788,6 +1803,7 @@ local function closeCurrentPanel()
 		if token == transitionToken and desiredScreen == nil then
 			dim.Visible = false
 			setActiveScreen(nil)
+			setActiveModalState(nil)
 			setInputLocked(false)
 			panelTransitioning = false
 		end
@@ -1812,8 +1828,32 @@ local function registerPanel(name, adapter)
 	end
 end
 
+-- The HUD uses this single controller-owned hook to respond to the rendered
+-- bounds of whichever large panel is active. External panels can expose their
+-- own root GuiObject without coupling the HUD to ScreenGui names or panel sizes.
+local function getActivePanelGuiObject()
+	if not activeModalState then
+		return nil
+	end
+
+	local externalPanel = externalPanels[activeModalState]
+	if externalPanel then
+		if type(externalPanel.GetGuiObject) == "function" then
+			local panelObject = externalPanel.GetGuiObject()
+			if typeof(panelObject) == "Instance" and panelObject:IsA("GuiObject") then
+				return panelObject
+			end
+		elseif typeof(externalPanel.GuiObject) == "Instance" and externalPanel.GuiObject:IsA("GuiObject") then
+			return externalPanel.GuiObject
+		end
+		return nil
+	end
+
+	return window
+end
+
 local function togglePanel(which)
-	if desiredScreen == which or activeScreen == which then
+	if desiredScreen == which or activeModalState == which then
 		closeCurrentPanel()
 	else
 		openPanel(which)
@@ -1827,7 +1867,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if isBackInput and player:GetAttribute("EclipseModalDialogOpen") == true then
 		return
 	end
-	if isBackInput and (dim.Visible or activeScreen ~= nil) then
+	if isBackInput and activeModalState ~= nil then
 		closeCurrentPanel()
 		return
 	end
@@ -1849,6 +1889,9 @@ _G.EclipseUI = {
 	RegisterPanel = registerPanel,
 	Screen = gui,
 	GetActiveScreen = function() return activeScreen end,
+	GetActiveModal = function() return activeModalState end,
+	GetActivePanelGuiObject = getActivePanelGuiObject,
 	IsTransitioning = function() return panelTransitioning end,
 	PanelChanged = panelChangedEvent.Event,
+	ModalChanged = modalChangedEvent.Event,
 }

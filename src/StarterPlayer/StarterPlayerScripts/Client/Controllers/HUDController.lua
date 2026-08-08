@@ -27,8 +27,10 @@ local ProgressBar = require(script.Parent.Parent.UI.Components.ProgressBar)
 local NotificationController = require(script.Parent.NotificationController)
 
 local MOBILE_VIEWPORT_WIDTH_THRESHOLD = 700
-local INFO_PANEL_WIDTH = 260
+local INFO_PANEL_WIDTH = 284
 local MOBILE_INFO_PANEL_WIDTH = 220
+local INFO_PANEL_MIN_WIDTH = 128
+local QUEST_PANEL_SAFE_GAP = 16
 local ACTION_BUTTON_WIDTH = 152
 local ACTION_BUTTON_HEIGHT = 52
 local SUBACTION_BUTTON_WIDTH = 136
@@ -350,78 +352,6 @@ function HUDController:Init()
 	questHintLabel.Parent = questPanel
 	self._questHintLabel = questHintLabel
 
-	-- Menu mode keeps only the active quest identity and progress. It is a
-	-- separate surface rather than a dimmed copy of the full HUD, so the
-	-- Backpack/Shop header never has to compete with XP and currency details.
-	local compactQuestGroup = Instance.new("CanvasGroup")
-	compactQuestGroup.Name = "CompactQuest"
-	compactQuestGroup.Size = UDim2.fromOffset(244, 54)
-	compactQuestGroup.Position = UDim2.fromOffset(Theme.Spacing.L, Theme.Spacing.L - 6)
-	compactQuestGroup.BackgroundTransparency = 1
-	compactQuestGroup.GroupTransparency = 1
-	compactQuestGroup.Visible = false
-	compactQuestGroup.Parent = root
-
-	local compactQuestPanel = GlassPanel.new({
-		Name = "QuestChip",
-		Size = UDim2.fromScale(1, 1),
-		CornerRadius = Theme.Corner.Medium,
-		Gradient = false,
-		DropShadow = false,
-		Parent = compactQuestGroup,
-	})
-
-	local compactPadding = Instance.new("UIPadding")
-	compactPadding.PaddingLeft = UDim.new(0, Theme.Spacing.M)
-	compactPadding.PaddingRight = UDim.new(0, Theme.Spacing.M)
-	compactPadding.PaddingTop = UDim.new(0, Theme.Spacing.XS)
-	compactPadding.PaddingBottom = UDim.new(0, Theme.Spacing.XS)
-	compactPadding.Parent = compactQuestPanel
-
-	local compactQuestTitle = Instance.new("TextLabel")
-	compactQuestTitle.Name = "QuestTitle"
-	compactQuestTitle.Size = UDim2.new(1, -58, 0, 18)
-	compactQuestTitle.BackgroundTransparency = 1
-	compactQuestTitle.Font = Theme.Font.Label.Font
-	compactQuestTitle.TextSize = Theme.Font.Caption.Size
-	compactQuestTitle.TextColor3 = Theme.Colors.BrandLight
-	compactQuestTitle.TextXAlignment = Enum.TextXAlignment.Left
-	compactQuestTitle.TextTruncate = Enum.TextTruncate.AtEnd
-	compactQuestTitle.LayoutOrder = 1
-	compactQuestTitle.Text = "FIRST STEPS"
-	compactQuestTitle.Parent = compactQuestPanel
-	self._compactQuestTitle = compactQuestTitle
-
-	local compactQuestProgress = Instance.new("TextLabel")
-	compactQuestProgress.Name = "Progress"
-	compactQuestProgress.AutomaticSize = Enum.AutomaticSize.X
-	compactQuestProgress.Size = UDim2.new(0, 0, 0, 18)
-	compactQuestProgress.AnchorPoint = Vector2.new(1, 0)
-	compactQuestProgress.Position = UDim2.fromScale(1, 0)
-	compactQuestProgress.BackgroundTransparency = 1
-	compactQuestProgress.Font = Theme.Font.Label.Font
-	compactQuestProgress.TextSize = Theme.Font.Caption.Size
-	compactQuestProgress.TextColor3 = Theme.Colors.TextSecondary
-	compactQuestProgress.TextXAlignment = Enum.TextXAlignment.Right
-	compactQuestProgress.LayoutOrder = 2
-	compactQuestProgress.Text = "0 / 1"
-	compactQuestProgress.Parent = compactQuestPanel
-	self._compactQuestProgress = compactQuestProgress
-
-	local compactQuestObjective = Instance.new("TextLabel")
-	compactQuestObjective.Name = "Objective"
-	compactQuestObjective.Position = UDim2.fromOffset(0, 20)
-	compactQuestObjective.Size = UDim2.new(1, 0, 0, 20)
-	compactQuestObjective.BackgroundTransparency = 1
-	compactQuestObjective.Font = Enum.Font.GothamMedium
-	compactQuestObjective.TextSize = 13
-	compactQuestObjective.TextColor3 = Theme.Colors.TextPrimary
-	compactQuestObjective.TextXAlignment = Enum.TextXAlignment.Left
-	compactQuestObjective.TextTruncate = Enum.TextTruncate.AtEnd
-	compactQuestObjective.Text = "Speak to the Survivor Guide"
-	compactQuestObjective.Parent = compactQuestPanel
-	self._compactQuestObjective = compactQuestObjective
-
 	-- Only three actions stay visible by default. Economy destinations live
 	-- behind the Shops disclosure so gameplay keeps visual priority.
 	local actionStack = Instance.new("Frame")
@@ -691,9 +621,9 @@ function HUDController:Init()
 
 	local starterPackEligible = false
 	local isNarrow = false
-	local currentEdgeSpacing = Theme.Spacing.L
-	local menuModeOpen = false
-	local menuModeToken = 0
+	local normalInfoPanelWidth = INFO_PANEL_WIDTH
+	local modalSessionWidth: number? = nil
+	local refreshQuestWidth: (boolean?) -> () = function() end
 
 	local function updateOfferVisibility()
 		starterPackContainer.Visible = starterPackEligible and not isNarrow
@@ -722,10 +652,10 @@ function HUDController:Init()
 		setShopsOpen(false)
 
 		local edgeSpacing = if narrow then Theme.Spacing.M else Theme.Spacing.L
-		currentEdgeSpacing = edgeSpacing
 		local infoPanelWidth = if narrow then MOBILE_INFO_PANEL_WIDTH else INFO_PANEL_WIDTH
 		local actionButtonWidth = if narrow then MOBILE_ACTION_BUTTON_SIZE else ACTION_BUTTON_WIDTH
 
+		normalInfoPanelWidth = infoPanelWidth
 		statusPanel.Size = UDim2.new(0, infoPanelWidth, 0, 0)
 		statusPanel.Position = UDim2.fromOffset(edgeSpacing, edgeSpacing)
 		scrapPanel.Position = UDim2.new(1, -Theme.Spacing.S, 0, Theme.Spacing.S)
@@ -734,26 +664,6 @@ function HUDController:Init()
 		persistentCurrencyLabel.Position = UDim2.fromOffset(if narrow then 36 else 46, 2)
 		persistentCurrencyLabel.Size = UDim2.new(1, if narrow then -40 else -50, 0, 21)
 		scrapCaption.Position = UDim2.fromOffset(if narrow then 36 else 46, if narrow then 21 else 25)
-		compactQuestGroup.Size = UDim2.fromOffset(if narrow then 200 else 244, 54)
-		compactQuestGroup.Position = UDim2.fromOffset(
-			edgeSpacing,
-			if menuModeOpen then edgeSpacing else edgeSpacing - 6
-		)
-
-		if menuModeOpen then
-			gameplayInfoGroup.Visible = false
-			gameplayInfoGroup.GroupTransparency = 0
-			gameplayInfoGroup.Position = UDim2.fromScale(0, 0)
-			compactQuestGroup.Visible = true
-			compactQuestGroup.GroupTransparency = 0
-		else
-			gameplayInfoGroup.Visible = true
-			gameplayInfoGroup.GroupTransparency = 0
-			gameplayInfoGroup.Position = UDim2.fromScale(0, 0)
-			compactQuestGroup.Visible = false
-			compactQuestGroup.GroupTransparency = 1
-		end
-
 		actionStack.Size = UDim2.new(0, actionButtonWidth, 0, 0)
 		actionStack.Position = UDim2.new(1, -edgeSpacing, 0.5, 0)
 		setRootButtonCompact(backpackContainer, menuButton, narrow)
@@ -767,73 +677,139 @@ function HUDController:Init()
 		end
 
 		updateOfferVisibility()
+		task.defer(function()
+			refreshQuestWidth(false)
+		end)
 	end
 
-	local function setMenuMode(open: boolean)
-		if menuModeOpen == open then
+	local function getActivePanelWindow(panelName: string?): GuiObject?
+		if panelName == nil then
+			return nil
+		end
+
+		local eclipseUI = (_G :: any).EclipseUI
+		if eclipseUI and type(eclipseUI.GetActivePanelGuiObject) == "function" then
+			local panelWindow = eclipseUI.GetActivePanelGuiObject()
+			if panelWindow and panelWindow:IsA("GuiObject") then
+				return panelWindow
+			end
+		end
+		return nil
+	end
+
+	local function targetQuestWidthForPanel(panelName: string?): number
+		local panelWindow = getActivePanelWindow(panelName)
+		if not panelWindow
+			or panelWindow.AbsoluteSize.X <= 0 or panelWindow.AbsoluteSize.Y <= 0
+		then
+			return normalInfoPanelWidth
+		end
+
+		local questPosition = statusPanel.AbsolutePosition
+		local questSize = statusPanel.AbsoluteSize
+		local panelPosition = panelWindow.AbsolutePosition
+		local panelSize = panelWindow.AbsoluteSize
+		local questBottom = questPosition.Y + questSize.Y
+		local panelBottom = panelPosition.Y + panelSize.Y
+		local sharesVerticalSpace = questPosition.Y < panelBottom + QUEST_PANEL_SAFE_GAP
+			and questBottom + QUEST_PANEL_SAFE_GAP > panelPosition.Y
+
+		if not sharesVerticalSpace then
+			return normalInfoPanelWidth
+		end
+		if panelPosition.X <= questPosition.X then
+			return INFO_PANEL_MIN_WIDTH
+		end
+
+		local availableWidth = math.floor(panelPosition.X - questPosition.X - QUEST_PANEL_SAFE_GAP)
+		return math.clamp(availableWidth, INFO_PANEL_MIN_WIDTH, normalInfoPanelWidth)
+	end
+
+	local narrowInfoRows = false
+	local function applyInfoRowLayout(width: number)
+		local shouldStack = width < 205
+		if narrowInfoRows == shouldStack then
 			return
 		end
 
-		menuModeOpen = open
-		menuModeToken += 1
-		local token = menuModeToken
+		narrowInfoRows = shouldStack
+		statusRow1Layout.FillDirection = if shouldStack then Enum.FillDirection.Vertical else Enum.FillDirection.Horizontal
+		statusRow1Layout.HorizontalAlignment = if shouldStack then Enum.HorizontalAlignment.Left else Enum.HorizontalAlignment.Center
+		statusRow1Layout.VerticalAlignment = if shouldStack then Enum.VerticalAlignment.Top else Enum.VerticalAlignment.Center
+		statusRow1.Size = UDim2.new(1, 0, 0, if shouldStack then 32 else 16)
+		levelLabel.Size = if shouldStack then UDim2.new(1, 0, 0, 16) else UDim2.new(0, 0, 1, 0)
+		xpCaption.Size = if shouldStack then UDim2.new(1, 0, 0, 16) else UDim2.new(0, 0, 1, 0)
+		xpCaption.TextXAlignment = if shouldStack then Enum.TextXAlignment.Left else Enum.TextXAlignment.Right
+		levelLabel.AutomaticSize = if shouldStack then Enum.AutomaticSize.None else Enum.AutomaticSize.X
+		xpCaption.AutomaticSize = if shouldStack then Enum.AutomaticSize.None else Enum.AutomaticSize.X
 
-		if open then
-			gameplayInfoGroup.Visible = true
-			compactQuestGroup.Visible = false
-			compactQuestGroup.GroupTransparency = 1
-			compactQuestGroup.Position = UDim2.fromOffset(currentEdgeSpacing, currentEdgeSpacing - 6)
+		questHeaderLayout.FillDirection = if shouldStack then Enum.FillDirection.Vertical else Enum.FillDirection.Horizontal
+		questHeaderLayout.HorizontalAlignment = if shouldStack then Enum.HorizontalAlignment.Left else Enum.HorizontalAlignment.Center
+		questHeaderLayout.VerticalAlignment = if shouldStack then Enum.VerticalAlignment.Top else Enum.VerticalAlignment.Center
+		questHeader.Size = UDim2.new(1, 0, 0, if shouldStack then 36 else 18)
+		questTitleLabel.Size = if shouldStack then UDim2.new(1, 0, 0, 18) else UDim2.new(0, 0, 1, 0)
+		questProgressLabel.Size = if shouldStack then UDim2.new(1, 0, 0, 18) else UDim2.new(0, 0, 1, 0)
+		questProgressLabel.TextXAlignment = if shouldStack then Enum.TextXAlignment.Left else Enum.TextXAlignment.Right
+		questTitleLabel.AutomaticSize = if shouldStack then Enum.AutomaticSize.None else Enum.AutomaticSize.X
+		questProgressLabel.AutomaticSize = if shouldStack then Enum.AutomaticSize.None else Enum.AutomaticSize.X
+	end
 
-			local fullExit = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-			Motion.Tween(gameplayInfoGroup, "MenuModeFade", fullExit, { GroupTransparency = 1 })
-			Motion.Tween(gameplayInfoGroup, "MenuModeSlide", fullExit, { Position = UDim2.fromOffset(0, -8) })
-
-			task.delay(0.04, function()
-				if token == menuModeToken and menuModeOpen then
-					gameplayInfoGroup.Visible = false
-					compactQuestGroup.Visible = true
-					compactQuestGroup.GroupTransparency = 1
-					local chipEnter = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-					Motion.Tween(compactQuestGroup, "MenuModeFade", chipEnter, { GroupTransparency = 0 })
-					Motion.Tween(
-						compactQuestGroup,
-						"MenuModeSlide",
-						chipEnter,
-						{ Position = UDim2.fromOffset(currentEdgeSpacing, currentEdgeSpacing) }
-					)
-				end
-			end)
+	refreshQuestWidth = function(animated: boolean?)
+		local targetWidth: number
+		if activePanel == nil then
+			modalSessionWidth = nil
+			targetWidth = normalInfoPanelWidth
 		else
-			gameplayInfoGroup.Visible = false
-			compactQuestGroup.Visible = true
-			local chipExit = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-			Motion.Tween(compactQuestGroup, "MenuModeFade", chipExit, { GroupTransparency = 1 })
+			local availableWidth = targetQuestWidthForPanel(activePanel)
+			-- A direct panel-to-panel switch remains one modal session. Retain the
+			-- narrowest safe width reached in that session so a temporarily hidden
+			-- outgoing panel can never produce a wide frame between two modals.
+			local retainedWidth = if modalSessionWidth ~= nil
+				then math.min(modalSessionWidth, availableWidth)
+				else availableWidth
+			modalSessionWidth = retainedWidth
+			targetWidth = retainedWidth
+		end
+		applyInfoRowLayout(targetWidth)
+		local targetSize = UDim2.new(0, targetWidth, 0, 0)
+		if animated == false then
+			statusPanel.Size = targetSize
+		else
 			Motion.Tween(
-				compactQuestGroup,
-				"MenuModeSlide",
-				chipExit,
-				{ Position = UDim2.fromOffset(currentEdgeSpacing, currentEdgeSpacing - 6) }
+				statusPanel,
+				"AvailableWidth",
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = targetSize }
 			)
-
-			task.delay(0.04, function()
-				if token == menuModeToken and not menuModeOpen then
-					compactQuestGroup.Visible = false
-					gameplayInfoGroup.Visible = true
-					gameplayInfoGroup.GroupTransparency = 1
-					gameplayInfoGroup.Position = UDim2.fromOffset(0, -8)
-					local fullEnter = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-					Motion.Tween(gameplayInfoGroup, "MenuModeFade", fullEnter, { GroupTransparency = 0 })
-					Motion.Tween(gameplayInfoGroup, "MenuModeSlide", fullEnter, { Position = UDim2.fromScale(0, 0) })
-				end
-			end)
 		end
 	end
+
+	local panelBoundsConnections: { RBXScriptConnection } = {}
+	local function watchPanelBounds(panelWindow: GuiObject?)
+		for _, connection in panelBoundsConnections do
+			connection:Disconnect()
+		end
+		table.clear(panelBoundsConnections)
+
+		if not panelWindow then
+			return
+		end
+		for _, property in { "AbsolutePosition", "AbsoluteSize" } do
+			table.insert(panelBoundsConnections, panelWindow:GetPropertyChangedSignal(property):Connect(function()
+				refreshQuestWidth()
+			end))
+		end
+	end
+	self._trove:Add(function()
+		watchPanelBounds(nil)
+	end)
 
 	local function applyActivePanel(panelName: string?)
 		local wasShopPanel = isShopPanel(activePanel)
 		activePanel = panelName
-		local panelIsOpen = panelName ~= nil
-		setMenuMode(panelIsOpen)
+		local panelWindow = getActivePanelWindow(panelName)
+		watchPanelBounds(panelWindow)
+		refreshQuestWidth()
 
 		HudIconButton.SetActive(menuButton, panelName == "Inventory")
 		HudIconButton.SetActive(marketplaceButton, panelName == "Marketplace")
@@ -891,11 +867,11 @@ function HUDController:Init()
 	task.spawn(function()
 		while screenGui.Parent do
 			local eclipseUI = (_G :: any).EclipseUI
-			if eclipseUI and typeof(eclipseUI.PanelChanged) == "RBXScriptSignal" then
-				if type(eclipseUI.GetActiveScreen) == "function" then
-					applyActivePanel(eclipseUI.GetActiveScreen())
+			if eclipseUI and typeof(eclipseUI.ModalChanged) == "RBXScriptSignal" then
+				if type(eclipseUI.GetActiveModal) == "function" then
+					applyActivePanel(eclipseUI.GetActiveModal())
 				end
-				self._trove:Add(eclipseUI.PanelChanged:Connect(function(panelName)
+				self._trove:Add(eclipseUI.ModalChanged:Connect(function(panelName)
 					applyActivePanel(panelName)
 				end))
 				return
@@ -913,20 +889,16 @@ function HUDController:_refreshQuestTracker(state: PlayerSessionTypes.QuestState
 	local text, current, target = QuestConfig.DescribeCurrentObjective(state)
 	local objectiveText = string.gsub(text, " %(%d+/%d+%)$", "")
 	self._questLabel.Text = objectiveText
-	self._compactQuestObjective.Text = objectiveText
 
 	local quest = if state.ActiveQuestId then QuestConfig.Get(state.ActiveQuestId) else QuestConfig.TutorialQuest
 	local questName = if quest then quest.name else "Current Objective"
 	local questTitle = string.upper(questName)
 	self._questTitleLabel.Text = questTitle
-	self._compactQuestTitle.Text = questTitle
 
 	if current and target and target > 0 then
 		self._questProgressLabel.Text = `{current} / {target}`
-		self._compactQuestProgress.Text = `{current} / {target}`
 		self._questProgressLabel.Visible = true
 	else
-		self._compactQuestProgress.Text = "--"
 		self._questProgressLabel.Visible = false
 	end
 
