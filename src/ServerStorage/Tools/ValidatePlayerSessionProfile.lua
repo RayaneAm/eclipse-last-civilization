@@ -57,9 +57,11 @@ function ValidatePlayerSessionProfile.Run(): { string }
 	check(merged.UnknownField == old.UnknownField, "merge-aware save preserves unknown top-level fields")
 
 	local hatchetRecipe = assert(CraftingConfig.Get("Hatchet"))
+	local craftObjective = QuestConfig.TutorialQuest.objectives[#QuestConfig.TutorialQuest.objectives - 1]
 	local finalObjective = QuestConfig.TutorialQuest.objectives[#QuestConfig.TutorialQuest.objectives]
 	check(hatchetRecipe.output.itemId == "Hatchet", "canonical Hatchet recipe grants canonical Hatchet item")
-	check(finalObjective.type == "CraftItem" and finalObjective.targetId == hatchetRecipe.id, "server-validated Hatchet craft is the final tutorial objective")
+	check(craftObjective.type == "CraftItem" and craftObjective.targetId == hatchetRecipe.id, "server-validated Hatchet craft precedes tutorial turn-in")
+	check(finalObjective.type == "TalkToNPC", "Survivor Guide turn-in is the final tutorial objective")
 
 	return checks
 end

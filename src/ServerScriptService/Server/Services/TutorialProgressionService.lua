@@ -1,9 +1,11 @@
 --!strict
 -- Routes loaded profiles to Tutorial or Haven and commits authoritative
--- tutorial completion before allowing the Haven transition.
+-- tutorial completion before allowing the Haven transition in production.
+-- Read-only Studio playtests may transition on in-memory state.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local QuestConfig = require(ReplicatedStorage.Shared.Config.QuestConfig)
@@ -81,7 +83,16 @@ local function commitAndEnterHaven(player: Player)
 			pendingCommit[player] = nil
 			return
 		end
-		if PlayerSessionService.SaveNow(player, true) then
+		-- A production player never leaves the tutorial until completion is
+		-- durable. Studio sessions with API Services disabled are deliberately
+		-- read-only, so allow that playtest to continue on an in-memory profile.
+		local completionIsSafe = if PlayerSessionService.CanPersist(player)
+			then PlayerSessionService.SaveNow(player, true)
+			else RunService:IsStudio()
+		if completionIsSafe then
+			if not PlayerSessionService.CanPersist(player) then
+				warn(`[TutorialProgressionService] Persistence is unavailable for {player.Name}; Studio Haven transition is session-only.`)
+			end
 			local havenSpawn = findSpawn(HAVEN_SPAWN_NAME)
 			if havenSpawn then
 				player.RespawnLocation = havenSpawn
@@ -97,6 +108,25 @@ local function commitAndEnterHaven(player: Player)
 		task.wait(RETRY_SECONDS)
 	end
 	pendingCommit[player] = nil
+end
+
+-- If a prior transition failed (or a completed player deliberately revisits
+-- the Tutorial Zone), speaking to the Guide again retries only the Haven
+-- travel. Quest rewards and completion are not awarded a second time.
+local function onCompletedQuestGiverInteracted(player: Player, questId: string)
+	if questId ~= QuestConfig.TutorialQuest.id then
+		return
+	end
+	local session = PlayerSessionService.Get(player)
+	if not session.TutorialCompleted then
+		if not InventoryService.HasAtLeast(player, HATCHET_ITEM_ID, 1) then
+			warn(`[TutorialProgressionService] Refusing Haven transition retry for {player.Name}: canonical Hatchet is missing.`)
+			return
+		end
+		session.TutorialCompleted = true
+		PlayerSessionService.MarkDirty(player)
+	end
+	task.spawn(commitAndEnterHaven, player)
 end
 
 local function onQuestCompleted(player: Player, questId: string)
@@ -118,6 +148,7 @@ end
 
 function TutorialProgressionService:Init()
 	QuestService.QuestCompleted:Connect(onQuestCompleted)
+	QuestService.CompletedQuestGiverInteracted:Connect(onCompletedQuestGiverInteracted)
 	PlayerSessionService.ProfileLoaded:Connect(function(player)
 		normalizeIncompleteTutorial(player)
 		bindCharacterRouting(player)

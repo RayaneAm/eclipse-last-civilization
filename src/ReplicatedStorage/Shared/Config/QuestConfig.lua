@@ -69,7 +69,13 @@ QuestConfig.TutorialQuest = {
 			targetId = "Hatchet",
 			amount = 1,
 			description = "Craft a Field Hatchet",
-			locationHint = "Use the shelter workbench. The server moves you to Haven after the Field Hatchet is safely recorded.",
+			locationHint = "Use the shelter workbench, then return to the Survivor Guide.",
+		},
+		{
+			type = "TalkToNPC",
+			amount = 1,
+			description = "Talk to the Survivor Guide",
+			locationHint = "Return to the Survivor Guide in the training shelter.",
 		},
 	},
 	rewardScrap = 25,
@@ -90,12 +96,12 @@ QuestConfig.TutorialQuest = {
 			{ Speaker = GUIDE_SPEAKER, Text = "Once you have enough materials, the shelter workbench can craft a Field Hatchet." },
 		},
 		TurnIn = {
-			{ Speaker = GUIDE_SPEAKER, Text = "Is that a Hatchet? Well done, survivor." },
+			{ Speaker = GUIDE_SPEAKER, Text = "Good job. That Field Hatchet will serve you well." },
 			{ Speaker = GUIDE_SPEAKER, Text = "You've proven you can handle yourself out here." },
-			{ Speaker = GUIDE_SPEAKER, Text = "The Forest Wildlands gate is yours to pass now. Stay sharp out there." },
+			{ Speaker = GUIDE_SPEAKER, Text = "I'll send you back to Survivor Haven now. The Forest Wildlands gate is yours to pass." },
 		},
 		AlreadyDone = {
-			{ Speaker = GUIDE_SPEAKER, Text = "Good to see you again. The Forest gate is still open, whenever you're ready." },
+			{ Speaker = GUIDE_SPEAKER, Text = "You've already proven yourself. I'll send you back to Survivor Haven now." },
 		},
 	},
 } :: QuestDefinition

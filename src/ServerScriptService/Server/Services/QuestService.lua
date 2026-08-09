@@ -20,6 +20,7 @@ local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 local QuestService = {}
 
 QuestService.QuestCompleted = Signal.new() -- (player, questId)
+QuestService.CompletedQuestGiverInteracted = Signal.new() -- (player, questId); lets tutorial travel retry without granting rewards twice
 
 local function pushUpdate(player: Player, state: PlayerSessionTypes.QuestState)
 	Net.GetEvent("QuestUpdated"):FireClient(player, state)
@@ -116,6 +117,7 @@ local function interactQuestGiver(player: Player): (boolean, string)
 
 	if not state.ActiveQuestId then
 		if table.find(state.CompletedQuestIds, QuestConfig.TutorialQuest.id) then
+			QuestService.CompletedQuestGiverInteracted:Fire(player, QuestConfig.TutorialQuest.id)
 			return true, "AlreadyCompleted"
 		end
 
