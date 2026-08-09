@@ -14,11 +14,11 @@ export type PortalPlacement = {
 
 local HavenLayoutConfig = {}
 
-HavenLayoutConfig.HAVEN_MIN_X = -80
-HavenLayoutConfig.HAVEN_MAX_X = 80
-HavenLayoutConfig.HAVEN_MIN_Z = -42
+HavenLayoutConfig.HAVEN_MIN_X = -62
+HavenLayoutConfig.HAVEN_MAX_X = 62
+HavenLayoutConfig.HAVEN_MIN_Z = -16
 HavenLayoutConfig.HAVEN_MAX_Z = 118
-HavenLayoutConfig.FORTIFICATION_HALF_WIDTH = 80
+HavenLayoutConfig.FORTIFICATION_HALF_WIDTH = 62
 HavenLayoutConfig.GATEWAY_HALF_WIDTH = 17
 HavenLayoutConfig.GATEWAY_CLEAR_HEIGHT = 28
 HavenLayoutConfig.PERIMETER_WALL_THICKNESS = 8
@@ -31,19 +31,24 @@ HavenLayoutConfig.SPAWN_POINT_COUNT = 5
 HavenLayoutConfig.SPAWN_PAD_SIZE = 5
 HavenLayoutConfig.SPAWN_SURFACE_HEIGHT = 1
 HavenLayoutConfig.SPAWN_ROOT_OFFSET = 3.5
--- Arrival composition: Personal Base remains on the west/left diagonal while
--- the Guide frames the opposite side. The central X=-8..8 arrival lane stays
--- entirely unobstructed between them.
-HavenLayoutConfig.GUIDE_LOCAL_POSITION = Vector3.new(24, 0, 84)
-HavenLayoutConfig.BASE_GATE_LOCAL_POSITION = Vector3.new(-26, 0, 84)
-HavenLayoutConfig.BASE_GATE_APPROACH_LOCAL_POSITION = Vector3.new(-12, 0, 92)
+-- Arrival composition: the survivor camp lives on the west/left diagonal and
+-- the communal fire circle frames the opposite side. The central X=-8..8
+-- arrival lane stays entirely unobstructed between them.
+--
+-- The east diagonal used to hold the Haven Guide (NPC + booth + sign). That
+-- installation is gone; the spot is now the settlement's gathering fire, which
+-- is what an arrival plaza in a survivor camp should actually offer — somewhere
+-- to stand, not someone to be lectured by.
+HavenLayoutConfig.CAMP_CIRCLE_LOCAL_POSITION = Vector3.new(24, 0, 84)
+HavenLayoutConfig.BASE_GATE_LOCAL_POSITION = Vector3.new(-39, 0, 80)
+HavenLayoutConfig.BASE_GATE_APPROACH_LOCAL_POSITION = Vector3.new(-22, 0, 90)
 -- The records hall spans the north-east corner and faces the real arrival
 -- terrace. Its diagonal silhouette is visible down the main street while its
 -- wide facade screens the plain retaining walls behind it.
-HavenLayoutConfig.LEADERBOARD_LOCAL_POSITION = Vector3.new(50, 0, -28)
+HavenLayoutConfig.LEADERBOARD_LOCAL_POSITION = Vector3.new(38, 0, -8)
 -- Haven's own northern gateway. Part of the Haven perimeter, NOT of the
 -- Expedition composition — it never moves with the district.
-HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION = Vector3.new(0, 0, -42)
+HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION = Vector3.new(0, 0, -16)
 
 -- ---------------------------------------------------------------------
 -- Expedition composition
@@ -56,20 +61,21 @@ HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION = Vector3.new(0, 0, -42)
 -- untouched by such a move. Compressing the fan and moving the fan are now
 -- different edits, not the same one.
 --
--- Arc center moved from Z=-125 to Z=-95 (30 studs toward Haven) to cut the
--- dead causeway between the Haven gateway and the staging plaza from 45 studs
--- to 15. RADIUS, ANGLES AND APPROACH RADIUS ARE UNCHANGED — the composition
--- was translated, never squeezed. Do not "save space" by shrinking
+-- Final compaction moves the complete fan from Z=-95 to Z=-30. RADIUS,
+-- ANGLES AND APPROACH RADIUS ARE UNCHANGED — the composition is translated,
+-- never squeezed. Do not "save space" by shrinking
 -- EXPEDITION_ARC_RADIUS; that is the thing the broad fan is made of.
 -- ---------------------------------------------------------------------
-HavenLayoutConfig.EXPEDITION_ARC_CENTER_LOCAL_POSITION = Vector3.new(0, 0, -95)
+HavenLayoutConfig.EXPEDITION_ARC_CENTER_LOCAL_POSITION = Vector3.new(0, 0, -30)
 HavenLayoutConfig.EXPEDITION_ARC_RADIUS = 95
 HavenLayoutConfig.EXPEDITION_APPROACH_RADIUS = 58 -- where a themed approach lane meets its connector path
-HavenLayoutConfig.EXPEDITION_GATHERING_OFFSET = 10 -- staging plaza sits this far in FRONT of (Haven-side of) the arc center
+HavenLayoutConfig.EXPEDITION_GATHERING_OFFSET = 6 -- compact platform meets Haven's north floor without overlapping it
 HavenLayoutConfig.EXPEDITION_GATHERING_LOCAL_POSITION = HavenLayoutConfig.EXPEDITION_ARC_CENTER_LOCAL_POSITION
 	+ Vector3.new(0, 0, HavenLayoutConfig.EXPEDITION_GATHERING_OFFSET)
 
-HavenLayoutConfig.ECLIPSE_RELAY_LOCAL_POSITION = Vector3.new(-36, 0, -27)
+-- The task board sits in the protected south-east arrival corner: close to
+-- Spawn, visible after arrival, and outside the central circulation lane.
+HavenLayoutConfig.NOTICE_BOARD_LOCAL_POSITION = Vector3.new(52, 0, 97)
 
 -- Local +Z is south (toward Haven), so the fan opens toward -Z: a portal at
 -- `angleDegrees` sits at (sin θ, -cos θ) * radius from the arc center.

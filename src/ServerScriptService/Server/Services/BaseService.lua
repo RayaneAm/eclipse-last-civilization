@@ -26,8 +26,8 @@ local Workspace = game:GetService("Workspace")
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
 local PersonalBaseConfig = require(ReplicatedStorage.Shared.Config.PersonalBaseConfig)
 local BaseSessionTypes = require(ReplicatedStorage.Shared.Config.BaseSessionTypes)
+local BaseSessionMigration = require(ReplicatedStorage.Shared.Config.BaseSessionMigration)
 local BuildingConfig = require(ReplicatedStorage.Shared.Config.BuildingConfig)
-local BlueprintLayoutConfig = require(ReplicatedStorage.Shared.Config.BlueprintLayoutConfig)
 local PortalDestinationConfig = require(ReplicatedStorage.Shared.Config.PortalDestinationConfig)
 
 local PersistenceStore = require(script.Parent.Parent.Modules.PersistenceStore)
@@ -43,6 +43,7 @@ local BaseService = {}
 
 local resolvedSlots: { [number]: number } = {}
 local sessions: { [number]: BaseSessionTypes.BaseSessionData } = {}
+local canPersist: { [number]: boolean } = {}
 local builtThisServer: { [number]: boolean } = {}
 local resolvingSlot: { [number]: boolean } = {}
 
@@ -109,7 +110,7 @@ local function deserializeSession(raw: { [string]: any }): BaseSessionTypes.Base
 		InvestmentScore = raw.InvestmentScore,
 		Structures = structures,
 		Storage = raw.Storage or {},
-		StorageCapacity = raw.StorageCapacity,
+		StorageCapacity = raw.StorageCapacity or BaseSessionTypes.NewDefault(raw.OwnerUserId or 0).StorageCapacity,
 		Reserved = raw.Reserved or {},
 		ProductionJobs = raw.ProductionJobs or {},
 		Power = raw.Power or { GeneratorFuel = 0, Enabled = {} },
@@ -196,45 +197,6 @@ local function newSessionWithCore(userId: number): BaseSessionTypes.BaseSessionD
 	return session
 end
 
--- Phase 4A.1: links pre-existing freeform-built structures (no PadId,
--- because blueprint pads didn't exist yet) to their matching pad by
--- BuildingId — never moves, recharges, upgrades, or deletes anything. Only
--- ever acts on structures still missing a PadId, and only claims a pad that
--- isn't already linked to something else, so re-running this against an
--- already-migrated (or partially-migrated) session is always a safe no-op
--- for anything already linked. Structures beyond what a pad group can hold
--- (e.g. a 9th freeform Wall against 8 Wall pads) are deliberately left
--- unlinked — still real, still owned, still rendered.
-local function migrateStructuresToPads(session: BaseSessionTypes.BaseSessionData)
-	local unlinkedIds: { string } = {}
-	for structureId, structure in session.Structures do
-		if not structure.PadId then
-			table.insert(unlinkedIds, structureId)
-		end
-	end
-	table.sort(unlinkedIds) -- deterministic: repeated/cross-server migrations always link the same way
-
-	local claimedPadIds: { [string]: boolean } = {}
-	for _, structure in session.Structures do
-		if structure.PadId then
-			claimedPadIds[structure.PadId] = true
-		end
-	end
-
-	for _, pad in BlueprintLayoutConfig.All do
-		if not claimedPadIds[pad.PadId] then
-			for _, structureId in unlinkedIds do
-				local structure = session.Structures[structureId]
-				if structure and not structure.PadId and structure.BuildingId == pad.BuildingId then
-					structure.PadId = pad.PadId
-					claimedPadIds[pad.PadId] = true
-					break
-				end
-			end
-		end
-	end
-end
-
 -- Yields (DataStore) only on the first call per server session for this userId.
 local function loadOrCreateSession(userId: number): BaseSessionTypes.BaseSessionData
 	if sessions[userId] then
@@ -244,22 +206,36 @@ local function loadOrCreateSession(userId: number): BaseSessionTypes.BaseSession
 	local key = tostring(userId)
 	local ok, raw = PersistenceStore.SafeGet(baseDataStore, key)
 	local session: BaseSessionTypes.BaseSessionData
+	local writable = false
 	if ok and raw then
 		local deserializeOk, deserialized = pcall(deserializeSession, raw)
-		session = if deserializeOk then deserialized else newSessionWithCore(userId)
+		if deserializeOk then
+			session = deserialized
+			writable = session.SchemaVersion <= BaseSessionTypes.CURRENT_SCHEMA_VERSION
+			if not writable then
+				warn(`[BaseService] Base {userId} uses unsupported future schema {session.SchemaVersion}; refusing writes.`)
+			end
+		else
+			warn(`[BaseService] Base {userId} could not be deserialized; using a read-only fallback.`)
+			session = newSessionWithCore(userId)
+		end
+	elseif ok then
+		session = newSessionWithCore(userId)
+		writable = true
 	else
+		warn(`[BaseService] Base load failed for {userId}; using a read-only fallback so existing data cannot be overwritten.`)
 		session = newSessionWithCore(userId)
 	end
 
 	-- Migration runs BEFORE the session is cached or handed to anything
 	-- else — blueprint-pad ghost rendering, RequestBuildBlueprint, and every
 	-- other consumer only ever see already-migrated data.
-	if session.SchemaVersion < BaseSessionTypes.CURRENT_SCHEMA_VERSION then
-		migrateStructuresToPads(session)
-		session.SchemaVersion = BaseSessionTypes.CURRENT_SCHEMA_VERSION
+	if writable and session.SchemaVersion < BaseSessionTypes.CURRENT_SCHEMA_VERSION then
+		BaseSessionMigration.Migrate(session)
 	end
 
 	sessions[userId] = session
+	canPersist[userId] = writable
 	return session
 end
 
@@ -267,14 +243,28 @@ function BaseService.Get(hostUserId: number): BaseSessionTypes.BaseSessionData?
 	return sessions[hostUserId]
 end
 
+function BaseService.CanPersist(hostUserId: number): boolean
+	return canPersist[hostUserId] == true
+end
+
 function BaseService.SaveNow(hostUserId: number)
 	local session = sessions[hostUserId]
-	if not session then
+	if not session or not BaseService.CanPersist(hostUserId) then
 		return
 	end
 	local ok, serialized = pcall(serializeSession, session)
 	if ok then
-		PersistenceStore.SafeSet(baseDataStore, tostring(hostUserId), serialized)
+		PersistenceStore.SafeUpdate(baseDataStore, tostring(hostUserId), function(old)
+			if typeof(old) == "table" and typeof(old.SchemaVersion) == "number" and old.SchemaVersion > BaseSessionTypes.CURRENT_SCHEMA_VERSION then
+				warn(`[BaseService] Base {hostUserId} was upgraded by a newer server during play; aborting stale save.`)
+				return nil
+			end
+			local merged = if typeof(old) == "table" then table.clone(old) else {}
+			for field, value in serialized do
+				merged[field] = value
+			end
+			return merged
+		end)
 	end
 end
 
@@ -361,10 +351,8 @@ function BaseService:Init()
 	end)
 
 	-- Returns {Session, Origin} rather than the bare session — BasePlacementController
-	-- needs the resolved world origin to convert its raycast-hit world
-	-- position into the base-local CFrame BuildingService's placement
-	-- remotes expect (see BuildingService.luau's header comment on why
-	-- CFrames are always local, never a client-claimed world position).
+	-- needs the resolved world origin to position its preview. BuildingService
+	-- independently converts the submitted world CFrame with its trusted origin.
 	Net.GetFunction("RequestBaseState").OnServerInvoke = function(_player: Player, hostUserId: number)
 		local session = sessions[hostUserId]
 		if not session then

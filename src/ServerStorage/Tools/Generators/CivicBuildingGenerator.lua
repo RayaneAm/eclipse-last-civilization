@@ -12,6 +12,7 @@ local CivicBuildingGenerator = {}
 local MODULE_WIDTH = HavenFacilityEnvelopeConfig.Width
 local MODULE_DEPTH = HavenFacilityEnvelopeConfig.Depth
 local SHELL_HEIGHT = HavenFacilityEnvelopeConfig.WallHeight
+local FLOOR_CLEARANCE = 0.16
 local function part(
 	parent: Instance,
 	name: string,
@@ -481,7 +482,9 @@ function CivicBuildingGenerator.Build(
 	GeneratorKit.CleanupPrevious(parent, facility.id)
 	local model = Instance.new("Model")
 	model.Name = facility.id
-	local cf = localCFrame(origin, facility, position)
+	-- Keep the complete module internally aligned while lifting its floor clear
+	-- of Haven's base surface. Previously both top faces ended at Y=1 exactly.
+	local cf = localCFrame(origin, facility, position) + Vector3.new(0, FLOOR_CLEARANCE, 0)
 	local accent = HavenLayoutConfig.GetDistrict(facility.district).accentColor
 	if facility.kind == "Market" then
 		buildMarket(model, cf, accent)

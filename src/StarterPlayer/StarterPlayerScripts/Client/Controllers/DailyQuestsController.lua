@@ -17,6 +17,7 @@
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
 local Trove = require(ReplicatedStorage.Shared.Modules.Trove)
@@ -44,6 +45,70 @@ local DailyQuestsController = {}
 
 local isOpen = false
 local previousSelection: GuiObject? = nil
+
+local function worldBoardSurface(): SurfaceGui?
+	local haven = Workspace:FindFirstChild("SurvivorHaven_Generated")
+	local board = if haven then haven:FindFirstChild("DailyQuestBoard") else nil
+	local display = if board then board:FindFirstChild("QuestDisplay", true) else nil
+	local surface = if display then display:FindFirstChild("QuestDisplaySurface") else nil
+	return if surface and surface:IsA("SurfaceGui") then surface else nil
+end
+
+local function childText(parent: Instance, name: string): TextLabel?
+	local child = parent:FindFirstChild(name)
+	return if child and child:IsA("TextLabel") then child else nil
+end
+
+local function renderWorldBoard(state: PlayerSessionTypes.DailyQuestState?)
+	local surface = worldBoardSurface()
+	if not surface then
+		return
+	end
+	local resetTimer = childText(surface, "ResetTimer")
+	if resetTimer then
+		resetTimer.Text = `Refreshing in {DailyQuestConfig.DescribeTimeUntilReset()}`
+	end
+
+	local entries = if state then state.Quests else {}
+	local fallbackIds = DailyQuestConfig.SharedDailyIds()
+	for index = 1, DailyQuestConfig.QUESTS_PER_DAY do
+		local row = surface:FindFirstChild(`QuestRow{index}`)
+		if not row or not row:IsA("Frame") then
+			continue
+		end
+		local entry = entries[index]
+		local id = if entry then entry.Id else fallbackIds[index]
+		local definition = DailyQuestConfig.Get(id)
+		if not definition then
+			continue
+		end
+		local progress = if entry then entry.Progress else 0
+		local completed = if entry then entry.Completed else false
+		local name = childText(row, "QuestName")
+		local objective = childText(row, "Objective")
+		local reward = childText(row, "Reward")
+		local status = childText(row, "Status")
+		if name then
+			name.Text = definition.name
+		end
+		if objective then
+			objective.Text = DailyQuestConfig.DescribeProgress(definition, progress)
+		end
+		if reward then
+			reward.Text = `+{definition.rewardScrap} SCRAP`
+		end
+		if status then
+			status.Text = if completed then "COMPLETE" else "INCOMPLETE"
+			status.TextColor3 = if completed then Color3.fromRGB(104, 214, 145) else Color3.fromRGB(230, 219, 202)
+		end
+		local track = row:FindFirstChild("ProgressTrack")
+		local fill = if track then track:FindFirstChild("ProgressFill") else nil
+		if fill and fill:IsA("Frame") then
+			fill.Size = UDim2.fromScale(math.clamp(progress / definition.amount, 0, 1), 1)
+			fill.BackgroundColor3 = if completed then Color3.fromRGB(104, 214, 145) else Color3.fromRGB(229, 176, 54)
+		end
+	end
+end
 
 -- One row per quest. Rebuilt wholesale on every state push rather than
 -- diffed in place — a set is at most DailyQuestConfig.QUESTS_PER_DAY rows and
@@ -159,11 +224,13 @@ end
 
 function DailyQuestsController:_refreshCountdown()
 	self._countdownLabel.Text = `Refreshing in {DailyQuestConfig.DescribeTimeUntilReset()}`
+	renderWorldBoard(self._lastState)
 end
 
 function DailyQuestsController:_render(state: PlayerSessionTypes.DailyQuestState?)
 	self._rowTrove:Clean()
 	self:_refreshCountdown()
+	renderWorldBoard(state)
 
 	local quests = if state then state.Quests else {}
 	if #quests == 0 then

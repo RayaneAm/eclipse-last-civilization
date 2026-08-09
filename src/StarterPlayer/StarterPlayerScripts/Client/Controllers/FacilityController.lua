@@ -15,6 +15,7 @@ local Trove = require(ReplicatedStorage.Shared.Modules.Trove)
 local HologramPanel = require(script.Parent.Parent.UI.Components.HologramPanel)
 local InventoryController = require(script.Parent.InventoryController)
 local DailyRewardsController = require(script.Parent.DailyRewardsController)
+local HUDController = require(script.Parent.HUDController)
 
 local FACILITY_TAG = "HavenFacility"
 
@@ -101,6 +102,14 @@ local function setupFacility(anchor: Instance, trove: any)
 		prompt.ActionText = "Claim"
 		trove:Add(prompt.Triggered:Connect(function()
 			DailyRewardsController.Open()
+		end))
+	elseif facility.kind == "DailyQuestBoard" then
+		-- The survivor task board in the Haven opens the existing Daily Quests
+		-- panel. The world object carries no quest text of its own — the live
+		-- set is per-player and lives in that panel.
+		prompt.ActionText = "Read Board"
+		trove:Add(prompt.Triggered:Connect(function()
+			HUDController.DailyQuestsOpenRequested:Fire()
 		end))
 	else
 		prompt.ActionText = "View"

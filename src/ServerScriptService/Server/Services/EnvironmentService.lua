@@ -20,54 +20,31 @@ export type Preset = {
 }
 
 local Presets: { [string]: Preset } = {
-	-- Cinematic, hopeful post-apocalypse: warm key light, cool falloff, gentle haze
-	-- for depth. Deliberately NOT dark-horror per the user's brief.
+	-- Dark, readable post-apocalypse: cool exterior fill with warm practical
+	-- Haven lighting. This remains evening rather than full nighttime.
 	--
-	-- Superseded by the "cozy dusk" pass documented on Default below: the
-	-- earlier tuning kept trying to fix blown-out emissives with global
-	-- exposure/bloom, which only ever made the unlit 90% of the world darker.
-	-- Emissive brightness is now handled per-part in the generators, leaving
-	-- this file free to light the world properly.
 	Default = {
-		-- "Cozy dusk" pass. The previous tuning was legitimately dark but
-		-- unreadable: anything more than a lamp's radius away fell to near
-		-- black, so the world read as an unlit void with a few blown-out
-		-- neon props floating in it.
+		-- Readable evening pass: darker outdoors, with enough indirect fill
+		-- that paths and player silhouettes remain navigable on mobile.
 		--
-		-- The fix is deliberately split across two levers, because they do
-		-- different jobs:
-		--   * AMBIENT (here) is raised hard. Ambient/OutdoorAmbient light
-		--     surfaces only — they do NOT brighten Neon/ForceField parts,
-		--     which always render at full color regardless of Lighting. So
-		--     raising ambient closes the gap between "lit prop" and "black
-		--     nothing" WITHOUT making the already-too-bright emissives worse.
-		--   * EXPOSURE stays near neutral. Raising it would scale emissives
-		--     up too and undo the emissive trims done in the generators.
-		-- Anything still too bright after this is fixed at the source (a
-		-- darker Neon Color / higher Transparency on that part), never by
-		-- pulling global exposure back down again.
-		--
-		-- ClockTime nudged 18.2 -> 17.9 so the sun sits just on the horizon:
-		-- keeps a warm sunset band in the sky (the "cozy" half) instead of
-		-- the flat gray dome of full civil twilight, without turning it into
-		-- daytime.
-		ClockTime = 17.75,
-		Brightness = 2.6,
-		-- The single biggest readability lever: shadow-side fill. Warm-neutral
-		-- rather than the old cold blue-gray so unlit geometry reads as
-		-- "evening indoors" instead of "moonlit ruin".
-		Ambient = Color3.fromRGB(100, 106, 118),
-		OutdoorAmbient = Color3.fromRGB(138, 148, 162),
-		ExposureCompensation = 0.12,
+		-- Readable evening: the sun is below the horizon, while controlled
+		-- blue-gray fill keeps characters, paths, entrances and walls legible.
+		-- This gives Haven's warm practical lights real contrast without
+		-- turning the hub into black nighttime.
+		ClockTime = 18.75,
+		Brightness = 2.15,
+		Ambient = Color3.fromRGB(86, 92, 108),
+		OutdoorAmbient = Color3.fromRGB(112, 121, 138),
+		ExposureCompensation = 0.06,
 		-- Contrast pulled back further (0.07 -> 0.03) since positive contrast
 		-- crushes exactly the shadow detail the ambient lift is buying, and
 		-- Saturation flipped positive with a warm tint to carry the "cozy"
 		-- half of the brief.
 		ColorCorrection = {
-			Brightness = 0.04,
-			Contrast = 0,
-			Saturation = 0.01,
-			TintColor = Color3.fromRGB(241, 238, 230),
+			Brightness = 0.015,
+			Contrast = 0.02,
+			Saturation = -0.01,
+			TintColor = Color3.fromRGB(230, 234, 242),
 		},
 		-- Density/Haze trimmed: at 0.28/0.9 the atmosphere was itself a large
 		-- part of the murk, greying out mid-distance geometry before the eye
@@ -75,10 +52,10 @@ local Presets: { [string]: Preset } = {
 		Atmosphere = {
 			Density = 0.14,
 			Offset = 0.25,
-			Color = Color3.fromRGB(190, 198, 208),
-			Decay = Color3.fromRGB(104, 111, 126),
-			Glare = 0.04,
-			Haze = 0.4,
+			Color = Color3.fromRGB(157, 170, 190),
+			Decay = Color3.fromRGB(82, 89, 104),
+			Glare = 0.02,
+			Haze = 0.42,
 		},
 		-- Bloom trimmed again and its threshold raised: with ambient this
 		-- much higher, the old 0.12/2.6 caught ordinary lit concrete, not

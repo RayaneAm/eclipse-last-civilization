@@ -37,11 +37,14 @@ end
 
 -- Retrofitted onto the shared HologramPanel this prompt — same bare "..."
 -- text as before, now with a real dark-glass background (previously just
--- floating white text with no panel chrome at all) and the Guidance
+-- floating white text with no panel chrome at all) and the Onboarding
 -- District's own accent color (120,220,140 — the same green
--- CivicBuildingGenerator/GuidanceGenerator already use for this district's
--- other geometry), since QuestGiverAnchor itself has no .Color set (unlike
--- FacilityAnchor, which the generator does color).
+-- CivicBuildingGenerator already uses for this district's other geometry),
+-- since QuestGiverAnchor itself has no .Color set (unlike FacilityAnchor,
+-- which the generator does color).
+--
+-- The only QuestGiverAnchor left in the game is the Tutorial Zone's; the Haven
+-- Guide installation this comment used to also describe has been removed.
 local function buildPanel(anchor: BasePart): TextLabel
 	local guidanceAccent = HavenLayoutConfig.GetDistrict("Onboarding").accentColor
 

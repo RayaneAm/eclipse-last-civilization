@@ -37,7 +37,7 @@ local BasePlacementController = {}
 
 local active = false
 local ghost: Part? = nil
-local zoneMarker: Part? = nil
+local zoneMarker: Model? = nil
 local selectedBuildingId: string? = nil
 local rotationDegrees = 0
 local baseOrigin: CFrame? = nil
@@ -63,9 +63,21 @@ local function snap(value: number): number
 	return math.floor(value / gridSize + 0.5) * gridSize
 end
 
+local function selectedFootprintExtents(): (number, number)
+	if not selectedBuildingId then
+		return 0, 0
+	end
+	local size = BuildingConfig.GetFootprintSize(selectedBuildingId)
+	local angle = math.rad(rotationDegrees)
+	local cosine = math.abs(math.cos(angle))
+	local sine = math.abs(math.sin(angle))
+	return cosine * size.X / 2 + sine * size.Z / 2, sine * size.X / 2 + cosine * size.Z / 2
+end
+
 local function withinBoundsLocal(localPos: Vector3): boolean
 	local bounds = PersonalBaseConfig.PlotBounds
-	return math.abs(localPos.X) <= bounds.HalfWidth and math.abs(localPos.Z) <= bounds.HalfDepth
+	local halfX, halfZ = selectedFootprintExtents()
+	return math.abs(localPos.X) + halfX <= bounds.HalfWidth and math.abs(localPos.Z) + halfZ <= bounds.HalfDepth
 end
 
 -- Phase 4A.1: freeform placement is now confined to the one marked
@@ -74,7 +86,8 @@ end
 -- shows green somewhere the server would reject.
 local function withinFreeformZoneLocal(localPos: Vector3): boolean
 	local zone = PersonalBaseConfig.FreeformZone
-	return localPos.X >= zone.MinX and localPos.X <= zone.MaxX and localPos.Z >= zone.MinZ and localPos.Z <= zone.MaxZ
+	local halfX, halfZ = selectedFootprintExtents()
+	return localPos.X - halfX >= zone.MinX and localPos.X + halfX <= zone.MaxX and localPos.Z - halfZ >= zone.MinZ and localPos.Z + halfZ <= zone.MaxZ
 end
 
 local function insideProtectedZoneLocal(localPos: Vector3): boolean
@@ -108,18 +121,30 @@ local function createZoneMarker()
 	local sizeX = zone.MaxX - zone.MinX
 	local sizeZ = zone.MaxZ - zone.MinZ
 
-	local part = Instance.new("Part")
-	part.Name = "FreeformZoneMarker"
-	part.Size = Vector3.new(sizeX, 0.2, sizeZ)
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.Transparency = 0.75
-	part.Material = Enum.Material.Neon
-	part.Color = Color3.fromRGB(140, 200, 255)
-	part.CFrame = baseOrigin * CFrame.new(centerLocal) * CFrame.new(0, 0.1, 0)
-	part.Parent = Workspace
-	zoneMarker = part
+	local model = Instance.new("Model")
+	model.Name = "FreeformZoneBoundary"
+	for _, edge in {
+		{ 0, -sizeZ / 2, sizeX, 0.22 },
+		{ 0, sizeZ / 2, sizeX, 0.22 },
+		{ -sizeX / 2, 0, 0.22, sizeZ },
+		{ sizeX / 2, 0, 0.22, sizeZ },
+	} do
+		local part = Instance.new("Part")
+		part.Name = "BoundaryEdge"
+		part.Size = Vector3.new(edge[3], 0.12, edge[4])
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Transparency = 0.58
+		part.Material = Enum.Material.SmoothPlastic
+		part.Color = Color3.fromRGB(108, 169, 166)
+		part.CFrame = baseOrigin * CFrame.new(centerLocal + Vector3.new(edge[1], 0.46, edge[2]))
+		part.Parent = model
+	end
+	model.Parent = Workspace
+	zoneMarker = model
 end
 
 local function destroyGhost()
@@ -206,7 +231,7 @@ local function beginGhostFor(buildingId: string)
 
 	local part = Instance.new("Part")
 	part.Name = "PlacementGhost"
-	part.Size = Vector3.new(5, 4, 5)
+	part.Size = BuildingConfig.GetFootprintSize(buildingId)
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanQuery = false
@@ -269,8 +294,9 @@ function BasePlacementController:_buildUI()
 	pickerTitle.Text = "SELECT A STRUCTURE"
 	pickerTitle.Parent = pickerPanel
 
+	local freeformBuildingIds = { Foundation = true, Wall = true, Door = true, DefenseWall = true, RepairStation = true }
 	for _, definition in BuildingConfig.All do
-		if definition.Id ~= "CivilizationCore" then
+		if freeformBuildingIds[definition.Id] then
 			Button.new({
 				Text = definition.Name,
 				Variant = "Secondary",

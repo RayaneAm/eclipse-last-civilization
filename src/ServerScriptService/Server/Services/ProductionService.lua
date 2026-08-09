@@ -9,8 +9,11 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
+local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
+local BuildingConfig = require(ReplicatedStorage.Shared.Config.BuildingConfig)
 local ProductionRecipeConfig = require(ReplicatedStorage.Shared.Config.ProductionRecipeConfig)
 
 local BaseService = require(script.Parent.BaseService)
@@ -18,14 +21,30 @@ local PowerService = require(script.Parent.PowerService)
 local CurrencyService = require(script.Parent.CurrencyService)
 
 local ProductionService = {}
+ProductionService.ProductionStarted = Signal.new() -- (player, machineStructureId, recipeId, jobId)
+ProductionService.ProductionCollected = Signal.new() -- (player, machineStructureId, recipeId, outputItemId, amount)
 
-local function machineIsBusy(session, machineStructureId: string): boolean
+local function refreshWorldVisuals(userId: number, session)
+	local PersonalBaseGenerator = require(ServerStorage.Tools.Generators.PersonalBaseGenerator)
+	PersonalBaseGenerator.UpdateProductionVisual(userId, session)
+end
+
+local function totalStored(session): number
+	local total = 0
+	for _, amount in session.Storage do
+		total += amount
+	end
+	return total
+end
+
+local function activeJobCount(session, machineStructureId: string): number
+	local count = 0
 	for _, job in session.ProductionJobs do
 		if job.MachineStructureId == machineStructureId and not job.Collected then
-			return true
+			count += 1
 		end
 	end
-	return false
+	return count
 end
 
 local function requestStartJob(player: Player, payload: { MachineStructureId: string, RecipeId: string }): (boolean, string?)
@@ -45,7 +64,15 @@ local function requestStartJob(player: Player, payload: { MachineStructureId: st
 	if not recipe or recipe.MachineBuildingId ~= machine.BuildingId then
 		return false, "UnknownRecipe"
 	end
-	if machineIsBusy(session, payload.MachineStructureId) then
+	local machineDefinition = BuildingConfig.Get(machine.BuildingId)
+	if not machineDefinition then
+		return false, "UnknownMachine"
+	end
+	local productionProfile = machineDefinition.ProductionProfile
+	if not productionProfile then
+		return false, "NotAProductionMachine"
+	end
+	if activeJobCount(session, payload.MachineStructureId) >= productionProfile.QueueSize then
 		return false, "MachineBusy"
 	end
 
@@ -57,8 +84,15 @@ local function requestStartJob(player: Player, payload: { MachineStructureId: st
 	if CurrencyService.GetBalance(player) < recipe.Scrap then
 		return false, "InsufficientScrap"
 	end
-	if not PowerService.HasCapacity(session, recipe.PowerDraw) then
+	local machineActivationDraw = if machineDefinition.PowerDraw > 0 and session.Power.Enabled[payload.MachineStructureId] ~= true
+		then machineDefinition.PowerDraw
+		else 0
+	if not PowerService.HasCapacity(session, machineActivationDraw + recipe.PowerDraw) then
 		return false, "InsufficientPower"
+	end
+	if machineActivationDraw > 0 then
+		session.Power.Enabled[payload.MachineStructureId] = true
+		machine.Enabled = true
 	end
 
 	-- Debited immediately, atomically — no yielding between the checks
@@ -73,15 +107,18 @@ local function requestStartJob(player: Player, payload: { MachineStructureId: st
 
 	local jobId = HttpService:GenerateGUID(false)
 	local now = os.time()
+	local duration = math.max(1, math.ceil(recipe.DurationSeconds / productionProfile.SpeedMultiplier))
 	session.ProductionJobs[jobId] = {
 		Id = jobId,
 		MachineStructureId = payload.MachineStructureId,
 		RecipeId = payload.RecipeId,
 		StartedAt = now,
-		CompletesAt = now + recipe.DurationSeconds,
+		CompletesAt = now + duration,
 		Collected = false,
 	}
 
+	refreshWorldVisuals(player.UserId, session)
+	ProductionService.ProductionStarted:Fire(player, payload.MachineStructureId, payload.RecipeId, jobId)
 	BaseService.BroadcastState(player.UserId)
 	return true, jobId
 end
@@ -109,6 +146,9 @@ local function requestCollectJob(player: Player, payload: { JobId: string }): (b
 	if not recipe then
 		return false, "UnknownRecipe"
 	end
+	if totalStored(session) + recipe.OutputQuantity > session.StorageCapacity then
+		return false, "StorageFull"
+	end
 
 	-- Flip the flag BEFORE granting output — a second concurrent collect
 	-- request on the same job (e.g. a repeated click) sees Collected=true
@@ -117,6 +157,8 @@ local function requestCollectJob(player: Player, payload: { JobId: string }): (b
 	session.Storage[recipe.OutputItemId] = (session.Storage[recipe.OutputItemId] or 0) + recipe.OutputQuantity
 	session.ProductionJobs[payload.JobId] = nil
 
+	refreshWorldVisuals(player.UserId, session)
+	ProductionService.ProductionCollected:Fire(player, job.MachineStructureId, job.RecipeId, recipe.OutputItemId, recipe.OutputQuantity)
 	BaseService.BroadcastState(player.UserId)
 	return true
 end
@@ -139,6 +181,7 @@ local function requestCancelJob(player: Player, payload: { JobId: string }): (bo
 
 	-- No refund — materials/Scrap already consumed at start stay consumed.
 	session.ProductionJobs[payload.JobId] = nil
+	refreshWorldVisuals(player.UserId, session)
 	BaseService.BroadcastState(player.UserId)
 	return true
 end

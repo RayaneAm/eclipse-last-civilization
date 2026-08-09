@@ -40,7 +40,7 @@ local Remotes: { [string]: RemoteKind } = {
 	-- Daily Quests. Read-only from the client's side by design — there is no
 	-- "I completed a daily objective" remote, exactly as QuestService's header
 	-- explains for the tutorial chain. Progress only ever moves on server Signals.
-	RequestDailyQuests = "Function", -- client -> server: no payload; rolls today's set if needed and returns the DailyQuestState
+	RequestDailyQuests = "Function", -- client -> server: no payload; assigns today's shared set if needed and returns personal progress
 	DailyQuestsUpdated = "Event", -- server -> client: push the full DailyQuestState on roll/progress/completion
 
 	-- Phase 4A: personal base

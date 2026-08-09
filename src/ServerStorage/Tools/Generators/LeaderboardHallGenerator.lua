@@ -14,9 +14,10 @@ type LeaderboardCategory = {
 	RowCount: number,
 }
 
-local HALL_WIDTH = 60
-local PANEL_WIDTH = 17.5
-local PANEL_HEIGHT = 18
+local HALL_WIDTH = 48
+local PANEL_WIDTH = 14.2
+local PANEL_HEIGHT = 19.5
+local PANEL_SPACING = 15.5
 local GOLD = Color3.fromRGB(231, 184, 61)
 local SILVER = Color3.fromRGB(190, 201, 213)
 local BRONZE = Color3.fromRGB(193, 119, 68)
@@ -60,15 +61,15 @@ end
 
 local function buildRankRow(parent: Instance, rank: number)
 	local color = rankColor(rank)
-	local rowHeight = 0.066
-	local rowGap = 0.0065
+	local rowHeight = 0.069
+	local rowGap = 0.0035
 	local row = Instance.new("Frame")
 	row.Name = `Rank{rank}`
-	row.BackgroundColor3 = if rank <= 3 then color:Lerp(Color3.fromRGB(18, 22, 27), 0.78) else Color3.fromRGB(35, 41, 47)
-	row.BackgroundTransparency = if rank <= 3 then 0.08 else 0.2
+	row.BackgroundColor3 = if rank <= 3 then color:Lerp(Color3.fromRGB(18, 22, 27), 0.72) else Color3.fromRGB(45, 54, 62)
+	row.BackgroundTransparency = 0
 	row.BorderSizePixel = 0
-	row.Position = UDim2.fromScale(0.04, 0.215 + (rank - 1) * (rowHeight + rowGap))
-	row.Size = UDim2.fromScale(0.92, rowHeight)
+	row.Position = UDim2.fromScale(0.02, 0.195 + (rank - 1) * (rowHeight + rowGap))
+	row.Size = UDim2.fromScale(0.96, rowHeight)
 	row:SetAttribute("Rank", rank)
 	row:SetAttribute("AwardType", medalName(rank))
 	row.Parent = parent
@@ -77,7 +78,7 @@ local function buildRankRow(parent: Instance, rank: number)
 	corner.CornerRadius = UDim.new(0.18, 0)
 	corner.Parent = row
 
-	local rankBadge = newLabel(row, "Medal", UDim2.fromScale(0.015, 0.08), UDim2.fromScale(0.14, 0.84))
+	local rankBadge = newLabel(row, "Medal", UDim2.fromScale(0.012, 0.08), UDim2.fromScale(0.16, 0.84))
 	rankBadge.BackgroundTransparency = 0
 	rankBadge.BackgroundColor3 = color
 	rankBadge.Font = Enum.Font.GothamBold
@@ -89,15 +90,15 @@ local function buildRankRow(parent: Instance, rank: number)
 	badgeCorner.CornerRadius = UDim.new(1, 0)
 	badgeCorner.Parent = rankBadge
 
-	local survivor = newLabel(row, "Survivor", UDim2.fromScale(0.18, 0), UDim2.fromScale(if rank <= 3 then 0.49 else 0.79, 1))
-	survivor.Font = if rank <= 3 then Enum.Font.GothamBold else Enum.Font.GothamMedium
-	survivor.Text = "AWAITING SURVIVOR"
-	survivor.TextColor3 = if rank <= 3 then color else Color3.fromRGB(221, 226, 227)
+	local survivor = newLabel(row, "Survivor", UDim2.fromScale(0.195, 0), UDim2.fromScale(if rank <= 3 then 0.45 else 0.78, 1))
+	survivor.Font = Enum.Font.GothamBold
+	survivor.Text = "AWAITING"
+	survivor.TextColor3 = if rank <= 3 then color else Color3.fromRGB(245, 248, 248)
 	survivor.TextScaled = true
 	survivor.TextTruncate = Enum.TextTruncate.AtEnd
 
 	if rank <= 3 then
-		local award = newLabel(row, "Award", UDim2.fromScale(0.69, 0), UDim2.fromScale(0.28, 1))
+		local award = newLabel(row, "Award", UDim2.fromScale(0.66, 0), UDim2.fromScale(0.31, 1))
 		award.Font = Enum.Font.GothamBold
 		award.Text = medalName(rank)
 		award.TextColor3 = color
@@ -110,7 +111,9 @@ local function buildPanel(parent: Instance, cf: CFrame, index: number, category:
 	local panelPart = GeneratorKit.NewPart({
 		Name = `LeaderboardPanel{index}`,
 		Size = Vector3.new(PANEL_WIDTH, PANEL_HEIGHT, 0.35),
-		CFrame = cf * CFrame.new((index - 2) * 19.2, 13.4, -1.2),
+		-- The displays sit well forward under the canopy. Nothing structural is
+		-- allowed in this plane, so all three remain visible from side approaches.
+		CFrame = cf * CFrame.new((index - 2) * PANEL_SPACING, 14.15, -3.2),
 		Material = Enum.Material.Metal,
 		Color = Color3.fromRGB(24, 29, 35),
 		CanCollide = false,
@@ -125,7 +128,8 @@ local function buildPanel(parent: Instance, cf: CFrame, index: number, category:
 	gui.Name = "TopTenDisplay"
 	gui.Face = Enum.NormalId.Front
 	gui.CanvasSize = Vector2.new(700, 820)
-	gui.LightInfluence = 0.15
+	gui.LightInfluence = 0
+	gui.Brightness = 1.4
 	gui.MaxDistance = 190
 	gui.Parent = panelPart
 
@@ -133,8 +137,8 @@ local function buildPanel(parent: Instance, cf: CFrame, index: number, category:
 	header.Name = "CategoryHeader"
 	header.BackgroundColor3 = Color3.fromRGB(31, 42, 51)
 	header.BorderSizePixel = 0
-	header.Position = UDim2.fromScale(0.04, 0.035)
-	header.Size = UDim2.fromScale(0.92, 0.155)
+	header.Position = UDim2.fromScale(0.02, 0.025)
+	header.Size = UDim2.fromScale(0.96, 0.145)
 	header.Parent = gui
 	local headerCorner = Instance.new("UICorner")
 	headerCorner.CornerRadius = UDim.new(0.12, 0)
@@ -173,7 +177,11 @@ function LeaderboardHallGenerator.Build(
 	local model = Instance.new("Model")
 	model.Name = "Leaderboards"
 	local spawn = origin:PointToWorldSpace(HavenLayoutConfig.SPAWN_LOCAL_POSITION)
-	local cf = CFrame.lookAt(position, Vector3.new(spawn.X, position.Y, spawn.Z))
+	-- The hall foundation used to share the exact Y=1 top plane with Haven's
+	-- ground. Lift the complete hall together so its approved alignment remains
+	-- unchanged while the floor is visually stable.
+	local raisedPosition = position + Vector3.new(0, 0.16, 0)
+	local cf = CFrame.lookAt(raisedPosition, Vector3.new(spawn.X, raisedPosition.Y, spawn.Z))
 
 	GeneratorKit.NewPart({
 		Name = "RecordsHallFoundation",
@@ -209,30 +217,30 @@ function LeaderboardHallGenerator.Build(
 		Parent = model,
 	})
 
-	for _, x in { -(HALL_WIDTH / 2 + 1.8), HALL_WIDTH / 2 + 1.8 } do
-		GeneratorKit.NewPart({
-			Name = "RecordsHallTower",
-			Size = Vector3.new(3.6, 30, 5),
-			CFrame = cf * CFrame.new(x, 15, 0),
-			Material = Enum.Material.Concrete,
-			Color = Color3.fromRGB(42, 47, 54),
+	-- No visible side pillars or rails: even shallow geometry could cover the
+	-- first display from a close, off-axis player camera. Invisible physics-only
+	-- returns connect the ranking wall to the rear perimeter so players cannot
+	-- walk behind the Hall, while CanQuery=false keeps cameras completely clear.
+	for index, x in { -(HALL_WIDTH / 2 + 0.5), HALL_WIDTH / 2 + 0.5 } do
+		local blocker = GeneratorKit.NewPart({
+			Name = `RecordsRearAccessBlocker{index}`,
+			Size = Vector3.new(1, 12, 28),
+			CFrame = cf * CFrame.new(x, 6, 10),
+			Transparency = 1,
+			CanCollide = true,
 			Parent = model,
 		})
-		GeneratorKit.NewPart({
-			Name = "ViewingRail",
-			Size = Vector3.new(0.8, 2.3, 13),
-			CFrame = cf * CFrame.new(x, 1.15, -7),
-			Material = Enum.Material.Metal,
-			Color = Color3.fromRGB(56, 62, 67),
-			Parent = model,
-		})
+		blocker.CanQuery = false
+		blocker.CanTouch = false
+		blocker.CastShadow = false
+		blocker:SetAttribute("PhysicsOnlyRearClosure", true)
 	end
 
 	for index, category in LeaderboardConfig.Categories do
 		buildPanel(model, cf, index, category, accentColor)
 	end
 
-	for _, x in { -25, -8.5, 8.5, 25 } do
+	for _, x in { -19, -6.4, 6.4, 19 } do
 		local practical = GeneratorKit.NewPart({
 			Name = "RecordsHallPractical",
 			Size = Vector3.new(4, 0.45, 0.7),
@@ -245,8 +253,8 @@ function LeaderboardHallGenerator.Build(
 		local light = Instance.new("SurfaceLight")
 		light.Face = Enum.NormalId.Bottom
 		light.Color = Color3.fromRGB(130, 203, 232)
-		light.Brightness = 0.75
-		light.Range = 15
+		light.Brightness = 1.1
+		light.Range = 18
 		light.Angle = 95
 		light.Parent = practical
 	end
@@ -255,7 +263,7 @@ function LeaderboardHallGenerator.Build(
 		Title = "SURVIVOR RECORDS HALL",
 		Subtitle = "TOP 10  |  HONOR THE BEST",
 		AccentColor = accentColor,
-		Width = 31,
+		Width = 26,
 		MaxDistance = 190,
 	})
 	GeneratorKit.Finalize(model, "RankingWall")
