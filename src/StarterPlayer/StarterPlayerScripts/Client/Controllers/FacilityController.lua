@@ -17,6 +17,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local HavenFacilityConfig = require(ReplicatedStorage.Shared.Config.HavenFacilityConfig)
 local Trove = require(ReplicatedStorage.Shared.Modules.Trove)
@@ -120,7 +121,17 @@ local function setupFacility(anchor: Instance, trove: any)
 		prompt.ActionText = "View"
 	end
 
-	trove:Add(buildPanel(anchor, facility))
+	-- The tutorial workbench already carries a physical, readable world label.
+	-- Keep its working crafting prompt, but do not stack the generic Haven
+	-- facility hologram above it as a second competing sign.
+	local tutorialZone = Workspace:FindFirstChild("TutorialZone_Generated")
+	local isTutorialUpgradeStation = facility.kind == "UpgradeStation"
+		and tutorialZone ~= nil
+		and anchor:IsDescendantOf(tutorialZone)
+	if not isTutorialUpgradeStation then
+		local panel = buildPanel(anchor, facility)
+		trove:Add(panel)
+	end
 end
 
 function FacilityController:Init()

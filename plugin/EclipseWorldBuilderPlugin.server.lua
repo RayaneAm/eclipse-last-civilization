@@ -20,6 +20,12 @@ local buildHavenButton = toolbar:CreateButton(
 	"",
 	"BUILD SURVIVOR HAVEN"
 )
+local buildTutorialButton = toolbar:CreateButton(
+	"BuildTutorialZone",
+	"Restore the authored tutorial template and apply the current Rojo-synced polish",
+	"",
+	"BUILD TUTORIAL ZONE"
+)
 local validateButton = toolbar:CreateButton(
 	"ValidateWorld",
 	"Run the live world-composition validator",
@@ -29,6 +35,7 @@ local validateButton = toolbar:CreateButton(
 
 buildCompleteButton.ClickableWhenViewportHidden = true
 buildHavenButton.ClickableWhenViewportHidden = true
+buildTutorialButton.ClickableWhenViewportHidden = true
 validateButton.ClickableWhenViewportHidden = true
 
 local busy = false
@@ -67,6 +74,10 @@ end)
 
 buildHavenButton.Click:Connect(function()
 	run("BuildSurvivorHaven", "Build Survivor Haven", true)
+end)
+
+buildTutorialButton.Click:Connect(function()
+	run("BuildTutorialZone", "Build Tutorial Zone", true)
 end)
 
 validateButton.Click:Connect(function()

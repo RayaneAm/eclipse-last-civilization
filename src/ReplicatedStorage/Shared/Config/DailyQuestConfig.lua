@@ -27,7 +27,7 @@
 --
 -- AMOUNTS are tuned against the real yields the game actually has today
 -- (ResourceConfig.baseYield = 1 per harvest, 25-30s respawn, 3 Wood + 3 Stone
--- nodes authored by BuildTutorialZone, ToolConfig.Hatchet doubling Wood), so
+-- nodes preserved by the Tutorial Zone template, ToolConfig.Hatchet doubling Wood), so
 -- each entry lands in a handful of minutes rather than a grind. Retune them
 -- here — they are read nowhere else.
 

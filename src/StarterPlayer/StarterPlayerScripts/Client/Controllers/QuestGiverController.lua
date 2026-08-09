@@ -1,6 +1,6 @@
 --!strict
 -- ProximityPrompt-driven quest start/turn-in on the Quest Giver anchor
--- (BuildTutorialZone's QuestGiverAnchor, tagged "QuestGiver" specifically so
+-- (the Tutorial template's QuestGiverAnchor, tagged "QuestGiver" specifically so
 -- this doesn't also attach to other "NPC"-tagged anchors like the Capsule
 -- Lab's scientist spot). Shows current objective text via a billboard,
 -- matching the project's existing hologram-panel pattern rather than a new
@@ -25,19 +25,23 @@ local QUEST_GIVER_TAG = "QuestGiver"
 local QuestGiverController = {}
 
 local statusLabel: TextLabel? = nil
+local statusPanel: BillboardGui? = nil
 
 -- Text formatting itself now lives in QuestConfig.DescribeCurrentObjective
 -- (shared with HUDController's quest tracker widget, added this prompt) so
 -- the two can't drift apart into different wording for the same state.
 local function updateLabel(state: PlayerSessionTypes.QuestState)
 	if statusLabel then
-		statusLabel.Text = QuestConfig.DescribeCurrentObjective(state)
+		local objectiveText = QuestConfig.DescribeCurrentObjective(state)
+		statusLabel.Text = objectiveText
+		if statusPanel then
+			statusPanel.Enabled = objectiveText ~= ""
+		end
 	end
 end
 
--- Retrofitted onto the shared HologramPanel this prompt — same bare "..."
--- text as before, now with a real dark-glass background (previously just
--- floating white text with no panel chrome at all) and the Onboarding
+-- The compact shared HologramPanel stays disabled until a real quest state is
+-- received, so players never see placeholder copy. It uses the Onboarding
 -- District's own accent color (120,220,140 — the same green
 -- CivicBuildingGenerator already uses for this district's other geometry),
 -- since QuestGiverAnchor itself has no .Color set (unlike FacilityAnchor,
@@ -45,22 +49,23 @@ end
 --
 -- The only QuestGiverAnchor left in the game is the Tutorial Zone's; the Haven
 -- Guide installation this comment used to also describe has been removed.
-local function buildPanel(anchor: BasePart): TextLabel
+local function buildPanel(anchor: BasePart): (BillboardGui, TextLabel)
 	local guidanceAccent = HavenLayoutConfig.GetDistrict("Onboarding").accentColor
 
-	local _billboard, labels = HologramPanel.new({
+	local billboard, labels = HologramPanel.new({
 		Name = "QuestPanel",
-		Size = UDim2.fromOffset(260, 60),
-		StudsOffsetWorldSpace = Vector3.new(0, 9, 0),
-		MaxDistance = 45,
+		Size = UDim2.fromOffset(210, 48),
+		StudsOffsetWorldSpace = Vector3.new(0, 6.5, 0),
+		MaxDistance = 30,
 		AccentColor = guidanceAccent,
 		Parent = anchor,
 		Sections = {
-			{ Name = "Body", Font = Enum.Font.Gotham, TextSize = 14, Height = 44, Wrapped = true, Text = "..." },
+			{ Name = "Body", Font = Enum.Font.Gotham, TextSize = 13, Height = 32, Wrapped = true, Text = "" },
 		},
 	})
+	billboard.Enabled = false
 
-	return labels.Body
+	return billboard, labels.Body
 end
 
 local function setupQuestGiver(anchor: Instance)
@@ -76,7 +81,7 @@ local function setupQuestGiver(anchor: Instance)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = anchor
 
-	statusLabel = buildPanel(anchor)
+	statusPanel, statusLabel = buildPanel(anchor)
 
 	prompt.Triggered:Connect(function()
 		-- Prompt 4C: the already-correct, already-server-validated remote

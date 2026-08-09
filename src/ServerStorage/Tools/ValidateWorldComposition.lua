@@ -4,6 +4,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local BiomeConfig = require(ReplicatedStorage.Shared.Config.BiomeConfig)
@@ -64,9 +65,198 @@ function ValidateWorldComposition.Run(): ValidationReport
 	local workbench = required(tutorialRoot, "TutorialWorkbench")
 	local workbenchAnchor = required(workbench, "FacilityAnchor")
 	check(report, workbench:IsA("Model") and workbenchAnchor:IsA("BasePart") and workbenchAnchor:GetAttribute("FacilityId") == "UpgradeStation", "Tutorial workbench preserves crafting facility contract")
-	check(report, required(tutorialRoot, "NaturalBoundary"):IsA("Model"), "Tutorial has visible natural containment")
+	local authoredEnvironment = required(tutorialRoot, "SmallHangout_Environment")
+	check(
+		report,
+		authoredEnvironment:IsA("Model")
+			and authoredEnvironment:GetAttribute("SourcePlace") == "Small-HangoutPlace (2).rbxl"
+			and authoredEnvironment:GetAttribute("GameplayValidated") == true,
+		"Tutorial keeps the original Small Hangout island-and-bridge layout"
+	)
+	check(report, tutorialRoot:GetAttribute("ArtDirectionVersion") == 4, "Tutorial uses the cleaned authored-map polish")
+	check(report, tutorialRoot:GetAttribute("VisualTheme") == "CleanHandcraftedTutorialCamp", "Tutorial uses the clean handcrafted camp visual theme")
+	local tutorialPolish = required(tutorialRoot, "TutorialPolish_Generated")
+	check(
+		report,
+		tutorialPolish:IsA("Model") and tutorialPolish:GetAttribute("PreservesGameplayContracts") == true,
+		"Tutorial polish explicitly records that gameplay contracts are preserved"
+	)
+	for _, generatedLayerName in {
+		"BridgeRails_Generated",
+		"GuideMarker_Generated",
+	} do
+		local generatedLayer = tutorialPolish:FindFirstChild(generatedLayerName)
+		check(
+			report,
+			generatedLayer ~= nil and generatedLayer:IsA("Model"),
+			`Tutorial polish includes grounded {generatedLayerName}`
+		)
+	end
+	for _, removedLayerName in {
+		"IslandMassing_Generated",
+		"PathComposition_Generated",
+		"CampHearth_Generated",
+		"DistantAtmosphere_Generated",
+		"GuideWelcome_Generated",
+	} do
+		check(
+			report,
+			tutorialRoot:FindFirstChild(removedLayerName, true) == nil,
+			`Tutorial removes the obsolete floating/clutter layer {removedLayerName}`
+		)
+	end
+	local guideMarker = required(tutorialPolish, "GuideMarker_Generated") :: Model
+	local guideSignPost = required(guideMarker, "GuideSignPost") :: BasePart
+	local authoredSurfaceY = -math.huge
+	for _, child in authoredEnvironment:GetChildren() do
+		if child:IsA("BasePart")
+			and child.Material == Enum.Material.Grass
+			and child.Size.X >= 40
+			and child.Size.Z >= 40
+		then
+			authoredSurfaceY = math.max(authoredSurfaceY, child.Position.Y + child.Size.Y / 2)
+		end
+	end
+	check(
+		report,
+		authoredSurfaceY > -math.huge
+			and math.abs((guideSignPost.Position.Y - guideSignPost.Size.Y / 2) - authoredSurfaceY) <= 0.05,
+		"Tutorial Guide marker post is planted on the authored island surface"
+	)
+	local guideWarmLight = required(guideMarker, "GuideWarmLight")
+	check(
+		report,
+		guideWarmLight:IsA("PointLight")
+			and (guideWarmLight :: PointLight).Brightness <= 0.5
+			and (guideWarmLight :: PointLight).Range <= 8
+			and not (guideWarmLight :: PointLight).Shadows,
+		"Tutorial polish adds one restrained warm Guide practical"
+	)
+	check(
+		report,
+		authoredEnvironment:FindFirstChild("Meshes/uploads_files_818717_wooden_sign", true) == nil
+			and tutorialRoot:GetAttribute("OversizedImportedSignRemoved") == true,
+		"Tutorial removes the oversized imported Beginner Outpost sign"
+	)
+	check(
+		report,
+		tutorialRoot:GetAttribute("TutorialCampDaisFlattened") == true
+			and tutorialRoot:GetAttribute("TutorialCampMovedInward") == true
+			and tutorialRoot:GetAttribute("TutorialTorchCleanupApplied") == true,
+		"Tutorial flattens and re-centers the camp while cleaning up the authored torches"
+	)
+	local workbenchVisual = required(workbench, "WorkbenchVisual_Generated")
+	check(
+		report,
+		workbenchVisual:IsA("Model") and workbenchVisual:GetAttribute("Appearance") == "HandBuiltTrestleGrindstone",
+		"Tutorial crafting table uses the custom trestle and grindstone silhouette"
+	)
+	check(
+		report,
+		workbenchVisual:FindFirstChild("CanvasCanopy", true) == nil
+			and workbenchVisual:FindFirstChild("MetalCanopyPatch", true) == nil
+			and workbenchVisual:FindFirstChild("CanopyBrace", true) == nil
+			and workbenchVisual:FindFirstChild("PartsBin", true) == nil,
+		"Tutorial crafting table has no detached canopy or floating parts bin"
+	)
+	local workbenchCollision = required(workbenchVisual, "WorkbenchCollision")
+	check(
+		report,
+		workbenchCollision:IsA("BasePart")
+			and workbenchCollision.Size == Vector3.new(8, 3, 3)
+			and workbenchCollision.Transparency == 1
+			and workbenchCollision.CanCollide,
+		"Tutorial crafting table retains the original 8x3x3 gameplay collision envelope"
+	)
+	local worldLabel = required(workbench, "WorldLabel")
+	check(report, worldLabel:IsA("BasePart") and worldLabel.Anchored, "Tutorial crafting label remains fixed to the rebuilt station")
+	local legacyWorkbench = required(workbench, "Workbench")
+	check(report, legacyWorkbench:IsA("BasePart") and legacyWorkbench.Transparency == 1 and not legacyWorkbench.CanCollide, "Tutorial hides the old block table without deleting its authored object")
+	local legacyToolRack = required(workbench, "ToolRack")
+	check(report, legacyToolRack:IsA("BasePart") and legacyToolRack.Transparency == 1 and not legacyToolRack.CanCollide, "Tutorial hides the old tool-rack slab without deleting its authored object")
+	local tutorialTreeCount = 0
+	local tutorialTreesStayAuthored = true
+	for _, child in authoredEnvironment:GetChildren() do
+		if child:IsA("Model") then
+			local _, treeSize = child:GetBoundingBox()
+			local meshCount = 0
+			for _, descendant in child:GetDescendants() do
+				if descendant:IsA("MeshPart") then
+					meshCount += 1
+				end
+			end
+			if meshCount >= 5 and treeSize.Y >= 14 and treeSize.X <= 18 and treeSize.Z <= 18 then
+				tutorialTreeCount += 1
+				local treeBox = child:GetBoundingBox()
+				tutorialTreesStayAuthored = tutorialTreesStayAuthored
+					and horizontalDistance((tutorialSpawn :: BasePart).Position, treeBox.Position) <= 130
+			end
+		end
+	end
+	check(report, tutorialTreeCount == 6 and tutorialTreesStayAuthored, "Tutorial keeps all six imported trees at their authored island positions")
+	local tutorialPartCount = 0
+	local tutorialPolishPartCount = 0
+	local tutorialDynamicLightCount = 0
+	for _, descendant in tutorialRoot:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			tutorialPartCount += 1
+		elseif descendant:IsA("PointLight") or descendant:IsA("SpotLight") or descendant:IsA("SurfaceLight") then
+			tutorialDynamicLightCount += 1
+		end
+	end
+	for _, descendant in tutorialPolish:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			tutorialPolishPartCount += 1
+		end
+	end
+	report.Measurements.TutorialStaticPartCount = tutorialPartCount
+	report.Measurements.TutorialPolishPartCount = tutorialPolishPartCount
+	report.Measurements.TutorialDynamicLightCount = tutorialDynamicLightCount
+	check(report, tutorialPartCount <= 215, `Tutorial stays within its 215-part total static budget (actual {tutorialPartCount})`)
+	check(report, tutorialPolishPartCount <= 20, `Tutorial generated environment stays within its 20-part quality budget (actual {tutorialPolishPartCount})`)
+	check(report, tutorialDynamicLightCount <= 3, `Tutorial stays within its three-light local budget (actual {tutorialDynamicLightCount})`)
 	local resourceAnchors = required(tutorialRoot, "ResourceSpawnAnchors")
-	check(report, #resourceAnchors:GetChildren() == 6, "Tutorial has six authored resource-node anchors")
+	local tutorialResourceCounts = { Wood = 0, Stone = 0 }
+	local tutorialResourceContractsValid = true
+	for _, anchor in resourceAnchors:GetChildren() do
+		if not (anchor:IsA("BasePart") and CollectionService:HasTag(anchor, "TutorialResourceSpawn")) then
+			tutorialResourceContractsValid = false
+		else
+			local resourceId = anchor:GetAttribute("ResourceId")
+			if resourceId == "Wood" then
+				tutorialResourceCounts.Wood += 1
+			elseif resourceId == "Stone" then
+				tutorialResourceCounts.Stone += 1
+			else
+				tutorialResourceContractsValid = false
+			end
+		end
+	end
+	check(
+		report,
+		#resourceAnchors:GetChildren() == 6
+			and tutorialResourceCounts.Wood == 3
+			and tutorialResourceCounts.Stone == 3
+			and tutorialResourceContractsValid,
+		"Tutorial keeps three Wood and three Stone anchors with their gameplay tags"
+	)
+	local tutorialTemplate = ServerStorage:FindFirstChild("TutorialZoneAuthoredTemplate")
+	check(report, tutorialTemplate ~= nil and tutorialTemplate:IsA("Model"), "Authored tutorial rebuild template exists")
+	local tutorialTemplateRoot = tutorialTemplate :: Model
+	local templateEnvironment = tutorialTemplateRoot:FindFirstChild("SmallHangout_Environment")
+	check(
+		report,
+		templateEnvironment ~= nil
+			and templateEnvironment:IsA("Model")
+			and templateEnvironment:GetAttribute("SourcePlace") == "Small-HangoutPlace (2).rbxl",
+		"Tutorial rebuild template retains the original Small Hangout source"
+	)
+	check(
+		report,
+		tutorialTemplateRoot:FindFirstChild("TutorialPolish_Generated", true) == nil
+			and tutorialTemplateRoot:GetAttribute("ArtDirectionVersion") == nil,
+		"Tutorial rebuild template remains pristine"
+	)
 	-- Navigation checks use the actual interaction volumes rather than a
 	-- pitched NPC model pivot or a decorative table block. They intentionally
 	-- measure XZ walking distance; anchor height is irrelevant to floor routing.
@@ -76,13 +266,13 @@ function ValidateWorldComposition.Run(): ValidationReport
 	report.Measurements.TutorialGuideToWorkbench = guideWorkbenchDistance
 	check(
 		report,
-		tutorialGuideDistance >= 10 and tutorialGuideDistance <= 18,
-		`Tutorial Spawn -> Guide expected 10-18 studs, actual {string.format("%.2f", tutorialGuideDistance)} studs`
+		tutorialGuideDistance >= 18 and tutorialGuideDistance <= 21,
+		`Tutorial Spawn -> Guide preserves the authored 18-21 stud route, actual {string.format("%.2f", tutorialGuideDistance)} studs`
 	)
 	check(
 		report,
-		guideWorkbenchDistance >= 8 and guideWorkbenchDistance <= 15,
-		`Tutorial Guide -> Workbench expected 8-15 studs, actual {string.format("%.2f", guideWorkbenchDistance)} studs`
+		guideWorkbenchDistance >= 26 and guideWorkbenchDistance <= 30,
+		`Tutorial Guide -> Workbench preserves the authored 26-30 stud route, actual {string.format("%.2f", guideWorkbenchDistance)} studs`
 	)
 
 	-- Haven ------------------------------------------------------------

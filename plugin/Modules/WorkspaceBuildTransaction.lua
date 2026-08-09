@@ -17,6 +17,9 @@ local ROOTS_BY_TOOL: { [string]: { string } } = {
 	BuildSurvivorHaven = {
 		"SurvivorHaven_Generated",
 	},
+	BuildTutorialZone = {
+		"TutorialZone_Generated",
+	},
 }
 
 export type Transaction = {
