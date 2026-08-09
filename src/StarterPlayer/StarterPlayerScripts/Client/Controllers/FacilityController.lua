@@ -1,20 +1,30 @@
 --!strict
--- Generic interaction for Haven's 8 functional areas: ProximityPrompt +
--- holographic info panel, directly modeled on GateController's pattern.
--- Deliberately client-only — there's no server-authoritative state yet (no
--- purchases, no gacha, no real leaderboard data), so no remote round-trip is
--- added just for show. A future dedicated prompt (e.g. a Market economy
--- prompt) wires real backend logic behind these same FacilityAnchor points
--- without this controller needing to change.
+-- Interaction for Haven's facility anchors: the world ProximityPrompt plus
+-- the floating info panel, and the routing from a prompt to that facility's
+-- screen.
+--
+-- Before the facility UI pass most of these prompts read "View" and did
+-- nothing at all — the hologram panel was the entire interaction. Now every
+-- facility with a screen routes to it through FacilityRouter, which keeps
+-- this file free of direct requires on ten controllers (and free of the
+-- require cycles that would come with them).
+--
+-- The routing table below is deliberately explicit about which facilities
+-- have a destination. A facility with no entry keeps the informational
+-- prompt rather than opening an empty panel — and a facility whose
+-- controller failed to register (so its route is missing at runtime) falls
+-- back to the same informational prompt instead of a dead press.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local HavenFacilityConfig = require(ReplicatedStorage.Shared.Config.HavenFacilityConfig)
 local Trove = require(ReplicatedStorage.Shared.Modules.Trove)
+
+local FacilityRouter = require(script.Parent.Parent.UI.FacilityRouter)
 local HologramPanel = require(script.Parent.Parent.UI.Components.HologramPanel)
+
 local InventoryController = require(script.Parent.InventoryController)
-local DailyRewardsController = require(script.Parent.DailyRewardsController)
 local HUDController = require(script.Parent.HUDController)
 
 local FACILITY_TAG = "HavenFacility"
@@ -26,17 +36,23 @@ for _, facility in HavenFacilityConfig do
 	facilityById[facility.id] = facility
 end
 
--- Retrofitted onto the shared HologramPanel this prompt — same content as
--- before (title + description), now with the diagonal gradient wash
--- GateController's panel already has, which this one previously lacked. A
--- deliberate visual upgrade, not just an internal refactor.
+-- FacilityKind -> (route id, prompt verb). Every route here is registered by
+-- the controller that owns that screen.
+local KIND_ROUTES: { [string]: { Route: string, ActionText: string } } = {
+	UpgradeStation = { Route = "UpgradeStation", ActionText = "Manage Upgrades" },
+	DailyRewards = { Route = "DailyRewards", ActionText = "Open" },
+	Market = { Route = "SurvivorMarket", ActionText = "Trade" },
+	CosmeticShop = { Route = "CosmeticShop", ActionText = "Browse" },
+	CapsuleLab = { Route = "Laboratory", ActionText = "Examine" },
+}
+
 local function buildPanel(anchor: BasePart, facility: HavenFacilityConfig.FacilityDefinition): BillboardGui
-	local billboard = HologramPanel.new({
+	return HologramPanel.new({
 		Name = "FacilityPanel",
 		Size = UDim2.fromOffset(220, 80),
 		StudsOffsetWorldSpace = Vector3.new(0, 10, 0),
 		MaxDistance = 40,
-		AccentColor = anchor.Color, -- the generator sets FacilityAnchor.Color to the owning district's accent color
+		AccentColor = anchor.Color, -- the generator sets FacilityAnchor.Color to the owning district's accent
 		Parent = anchor,
 		Sections = {
 			{ Name = "Title", Font = Enum.Font.GothamBold, TextSize = 17, Height = 24, Text = facility.name },
@@ -51,8 +67,6 @@ local function buildPanel(anchor: BasePart, facility: HavenFacilityConfig.Facili
 			},
 		},
 	})
-
-	return billboard
 end
 
 local function setupFacility(anchor: Instance, trove: any)
@@ -75,52 +89,56 @@ local function setupFacility(anchor: Instance, trove: any)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "FacilityPrompt"
 	prompt.ObjectText = facility.name
-	-- Phase 1 correction: 16 -> 12 — Survivor Haven's two intentionally-close
-	-- clustered facility pairs (Gamepass Showcase/Starter Pack, Season
-	-- Event/Season Pass) sit ~26-34 studs apart edge-to-edge; at 16 studs
-	-- each, both prompts could be active at once for a player standing
-	-- between them. 12 keeps that from happening.
+	-- 12 studs, not 16: Haven's two intentionally-close clustered facility
+	-- pairs sit ~26-34 studs apart edge-to-edge, and at 16 both prompts could
+	-- be active at once for a player standing between them.
 	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = anchor
 	trove:Add(prompt)
 
-	-- The Upgrade Station is the one facility with a real, working backend
-	-- behind it today (crafting) — give it a real action instead of the
-	-- generic "View" every other still-placeholder facility gets. Reuses
-	-- InventoryController's existing panel; RequestCraft stays the only
-	-- crafting request, nothing new added here.
-	if facility.kind == "UpgradeStation" then
-		prompt.ActionText = "Open Crafting"
+	local routing = KIND_ROUTES[facility.kind]
+	if routing then
+		prompt.ActionText = routing.ActionText
+		local routeId = routing.Route
 		trove:Add(prompt.Triggered:Connect(function()
-			InventoryController.Open("Crafting")
-		end))
-	elseif facility.kind == "DailyRewards" then
-		-- Phase 3B: a real action instead of the generic "View" — the prompt
-		-- opens the roulette-roll UI; the excitement lives there, not in the
-		-- hologram info panel this facility keeps like every other one.
-		prompt.ActionText = "Claim"
-		trove:Add(prompt.Triggered:Connect(function()
-			DailyRewardsController.Open()
+			if not FacilityRouter.Open(routeId) then
+				warn(`FacilityController: no screen registered for route "{routeId}"`)
+			end
 		end))
 	elseif facility.kind == "DailyQuestBoard" then
-		-- The survivor task board in the Haven opens the existing Daily Quests
-		-- panel. The world object carries no quest text of its own — the live
-		-- set is per-player and lives in that panel.
+		-- The board's live set is per-player and lives in the existing Daily
+		-- Quests panel, which the HUD owns — deliberately left alone by this
+		-- pass (the sidebar/HUD is a separate task).
 		prompt.ActionText = "Read Board"
 		trove:Add(prompt.Triggered:Connect(function()
 			HUDController.DailyQuestsOpenRequested:Fire()
 		end))
 	else
+		-- Leaderboards and the UI-only monetization anchors: the hologram
+		-- panel is the whole interaction, so the prompt says so.
 		prompt.ActionText = "View"
 	end
 
-	local panel = buildPanel(anchor, facility)
-	trove:Add(panel)
+	trove:Add(buildPanel(anchor, facility))
 end
 
 function FacilityController:Init()
 	self._trove = Trove.new()
+
+	-- Crafting has a real backend (CraftingConfig + RequestCraft) and already
+	-- has a working panel; it is registered here rather than being rebuilt as
+	-- a facility modal, so the Upgrade Station and the Laboratory can both
+	-- link to the one implementation.
+	FacilityRouter.Register("Crafting", function(context: { ReturnRoute: string, ReturnTab: string? }?)
+		local onClosed: (() -> ())? = nil
+		if context and context.ReturnRoute ~= "" then
+			onClosed = function()
+				FacilityRouter.Open(context.ReturnRoute, context.ReturnTab)
+			end
+		end
+		InventoryController.Open("Crafting", onClosed)
+	end)
 end
 
 function FacilityController:Start()
@@ -128,9 +146,9 @@ function FacilityController:Start()
 		setupFacility(instance, self._trove)
 	end
 
-	CollectionService:GetInstanceAddedSignal(FACILITY_TAG):Connect(function(instance)
+	self._trove:Add(CollectionService:GetInstanceAddedSignal(FACILITY_TAG):Connect(function(instance)
 		setupFacility(instance, self._trove)
-	end)
+	end))
 end
 
 return FacilityController

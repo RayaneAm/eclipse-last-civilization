@@ -36,6 +36,12 @@ local Remotes: { [string]: RemoteKind } = {
 	-- Phase 3B: monetization UI + Daily Rewards roulette
 	RequestStarterPackEligible = "Function", -- client -> server: no payload; returns boolean (PlaytimeService, < 30 total hours)
 	RequestDailyRewardRoll = "Function", -- client -> server: no payload; returns { Rejected: true } or { RewardIndex: number, Streak: number }
+	-- Read-only companion to the roll above, added with the facility UI pass.
+	-- The reveal screen has to know whether a spin is available and what the
+	-- current streak is BEFORE the player commits — without this the only way
+	-- to find out was to call the roll, which claims. Grants nothing and
+	-- mutates nothing; see DailyRewardsService.GetStatus.
+	RequestDailyRewardStatus = "Function", -- client -> server: no payload; returns { Available: boolean, Streak: number, SecondsUntilReset: number }
 
 	-- Daily Quests. Read-only from the client's side by design — there is no
 	-- "I completed a daily objective" remote, exactly as QuestService's header

@@ -7,8 +7,43 @@
 -- that's unnecessary risk for a single panel and explicitly out of scope.
 
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 
 local GamepadNav = {}
+
+local function isActuallyVisible(guiObject: GuiObject): boolean
+	local current: Instance? = guiObject
+	local screenGui: ScreenGui? = nil
+	local screenRoot: GuiObject? = nil
+	while current do
+		if current:IsA("GuiObject") and not current.Visible then
+			return false
+		end
+		if current:IsA("LayerCollector") and not current.Enabled then
+			return false
+		end
+		if current:IsA("ScreenGui") then
+			screenGui = current
+			break
+		end
+		if current:IsA("GuiObject") then
+			screenRoot = current
+		end
+		current = current.Parent
+	end
+
+	-- GuiService rejects targets that are technically Visible but currently
+	-- outside the rendered viewport (common while a modal is settling in).
+	local position = guiObject.AbsolutePosition
+	local size = guiObject.AbsoluteSize
+	local bounds = screenRoot and screenRoot.AbsoluteSize
+	if screenGui and bounds then
+		if position.X < 0 or position.Y < 0 or position.X + size.X > bounds.X or position.Y + size.Y > bounds.Y then
+			return false
+		end
+	end
+	return true
+end
 
 -- Wires a flat vertical Up/Down chain (e.g. a tab strip, a single-column
 -- list). No wraparound at the ends.
@@ -57,8 +92,11 @@ end
 -- Finds the first Selectable GuiButton under `container` (depth-first) and
 -- makes it the active gamepad selection. Returns what it picked, if anything.
 function GamepadNav.FocusFirst(container: GuiObject): GuiObject?
+	if not UserInputService.GamepadEnabled then
+		return nil
+	end
 	for _, descendant in container:GetDescendants() do
-		if descendant:IsA("GuiButton") and descendant.Selectable and descendant.Visible then
+		if descendant:IsA("GuiButton") and descendant.Selectable and isActuallyVisible(descendant) then
 			GuiService.SelectedObject = descendant
 			return descendant
 		end
@@ -67,7 +105,15 @@ function GamepadNav.FocusFirst(container: GuiObject): GuiObject?
 end
 
 function GamepadNav.Restore(previous: GuiObject?)
-	GuiService.SelectedObject = previous
+	if not UserInputService.GamepadEnabled then
+		GuiService.SelectedObject = nil
+		return
+	end
+	if previous and previous.Parent and previous.Selectable and isActuallyVisible(previous) then
+		GuiService.SelectedObject = previous
+	else
+		GuiService.SelectedObject = nil
+	end
 end
 
 return GamepadNav

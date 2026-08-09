@@ -1,19 +1,26 @@
 --!strict
--- Rounded, modern button in 4 variants. Every button in the system (Craft,
--- Equip, Close, tab entries) is built on this one constructor so
--- hover/press/disabled feedback is guaranteed consistent everywhere.
+-- The chunky ECLIPSE game button. Every CTA in the game is one of these.
 --
--- Primary/Danger read as solid, pressable CTAs (near-opaque fill + glossy
--- top-highlight gradient + shadow) — the original 0.75 background
--- transparency left them looking like a washed-out tint, not a real button.
--- Secondary is a lighter glass tint. Ghost is text-only at rest but gets its
--- own hover wash (Interaction.Bind has no color feedback to give it, since
--- Ghost intentionally has no UIStroke — see below).
+-- The previous version was a translucent tinted rectangle with a hairline
+-- stroke — it read as a web control. This one is built the way simulator/
+-- tycoon buttons are built, from four cheap layers:
+--
+--   1. LIP      a darker slab offset a few px down, visible below the face.
+--               This is the entire "3D" illusion and costs one Frame.
+--   2. FACE     the accent fill, carrying a gloss gradient (light at the
+--               top, slightly darkened at the bottom) so it looks lit.
+--   3. OUTLINE  a 2px near-black border. Dark outlines on bright shapes are
+--               what make a UI look chunky rather than flat.
+--   4. LABEL    black-weight text, with dark text on light accents so a
+--               gold or yellow button stays readable.
+--
+-- Pressing tweens the face DOWN onto the lip, so the button physically
+-- depresses instead of only scaling. That is handled here rather than in
+-- UIAnimator because it is specific to this construction.
 
 local Theme = require(script.Parent.Parent.Theme)
 local Motion = require(script.Parent.Parent.Motion)
 local Interaction = require(script.Parent.Parent.Interaction)
-local Shadow = require(script.Parent.Parent.Shadow)
 
 local Button = {}
 
@@ -33,95 +40,180 @@ export type ButtonOptions = {
 	Parent: Instance?,
 }
 
-local GHOST_HOVER_TRANSPARENCY = 0.85
+local LIP_DEPTH = 4
+
+-- Light accents (gold, yellow, lime) need dark text; deep ones need white.
+-- Perceptual luminance, so this is decided by the color rather than by a
+-- per-caller guess.
+local function labelColorFor(fill: Color3): Color3
+	local luminance = 0.299 * fill.R + 0.587 * fill.G + 0.114 * fill.B
+	return if luminance > 0.62 then Theme.Colors.TextOnAccent else Theme.Colors.TextPrimary
+end
 
 function Button.new(options: ButtonOptions): TextButton
 	local variant: ButtonVariant = options.Variant or "Primary"
-	local accentColor = options.AccentColor or (if variant == "Danger" then Theme.Colors.Danger else Theme.Colors.Brand)
-	local isStrong = variant == "Primary" or variant == "Danger"
+	local accent = options.AccentColor or (if variant == "Danger" then Theme.Colors.Danger else Theme.Colors.Brand)
 
+	local isStrong = variant == "Primary" or variant == "Danger"
+	local faceColor: Color3
+	local labelColor: Color3
+	if variant == "Ghost" then
+		faceColor = Theme.Colors.CardBackground
+		labelColor = Theme.Colors.TextSecondary
+	elseif variant == "Secondary" then
+		-- A muted slab that still reads as a real button, tinted toward the
+		-- accent so it belongs to the same screen.
+		faceColor = accent:Lerp(Theme.Colors.Surface, 0.72)
+		labelColor = Theme.Colors.TextPrimary
+	else
+		faceColor = accent
+		labelColor = labelColorFor(accent)
+	end
+
+	-- The outer button is the LIP: a darker slab. The face sits on top of it,
+	-- inset from the bottom, which is what leaves the visible ledge.
 	local button = Instance.new("TextButton")
 	button.Name = options.Name or "Button"
-	button.Size = options.Size or UDim2.fromOffset(140, 44)
+	button.Size = options.Size or UDim2.fromOffset(150, 46)
 	button.Position = options.Position or UDim2.fromScale(0, 0)
 	button.AnchorPoint = options.AnchorPoint or Vector2.new(0, 0)
 	button.LayoutOrder = options.LayoutOrder or 0
 	button.AutoButtonColor = false
 	button.Text = ""
-	button.BackgroundColor3 = if variant == "Ghost" then Theme.Colors.PanelBackground else accentColor
-	button.BackgroundTransparency = if variant == "Ghost" then 1 elseif variant == "Secondary" then 0.48 else 0.12
+	button.BackgroundColor3 = if variant == "Ghost" then Theme.Colors.Surface else faceColor:Lerp(Theme.Colors.Void, 0.55)
+	button.BackgroundTransparency = if variant == "Ghost" then 1 else 0
 	button.BorderSizePixel = 0
+	button.ClipsDescendants = false
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = Theme.Corner.Large -- rounder shape, matching every other surface in the system
+	corner.CornerRadius = Theme.Corner.Medium
 	corner.Parent = button
 
 	if variant ~= "Ghost" then
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = accentColor
-		stroke.Thickness = if isStrong then 2 else 1.5
-		stroke.Transparency = if variant == "Secondary" then 0.25 else Theme.Transparency.StrokeBright
-		stroke.Parent = button
+		Theme.Outline(button, Theme.Stroke.Card)
 	end
 
-	-- Glossy top-highlight gradient — distinct from GlassPanel's subtle
-	-- accent wash, meant to actually read as a lit, pressable surface.
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.Size = UDim2.new(1, 0, 1, -LIP_DEPTH)
+	face.Position = UDim2.fromOffset(0, 0)
+	face.BackgroundColor3 = faceColor
+	face.BackgroundTransparency = if variant == "Ghost" then 1 else 0
+	face.BorderSizePixel = 0
+	face.Parent = button
+
+	local faceCorner = Instance.new("UICorner")
+	faceCorner.CornerRadius = Theme.Corner.Medium
+	faceCorner.Parent = face
+
 	if isStrong then
-		local gradient = Instance.new("UIGradient")
-		gradient.Name = "Gradient"
-		gradient.Color = ColorSequence.new(accentColor:Lerp(Color3.new(1, 1, 1), 0.35), accentColor)
-		gradient.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.05),
-			NumberSequenceKeypoint.new(1, 0.35),
-		})
-		gradient.Rotation = 90
-		gradient.Parent = button
+		Theme.GlossGradient(faceColor).Parent = face
 	end
 
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Theme.Font.Heading.Font
-	label.TextSize = Theme.Font.Heading.Size
-	label.TextColor3 = if variant == "Secondary" or variant == "Ghost" then accentColor else Theme.Colors.TextPrimary
-	label.Text = options.Text
-	label.Parent = button
+	label.Font = Theme.Font.Button.Font
+	label.TextSize = Theme.Font.Button.Size
+	label.TextColor3 = labelColor
+	label.TextTruncate = Enum.TextTruncate.AtEnd
+	label.Text = string.upper(options.Text)
+	label.Parent = face
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, Theme.Spacing.S)
+	padding.PaddingRight = UDim.new(0, Theme.Spacing.S)
+	padding.Parent = label
 
 	button.Parent = options.Parent
 
+	-- Press feedback: the face travels down onto the lip and back. Combined
+	-- with Interaction's scale pulse this reads as a real physical press.
 	if variant ~= "Ghost" then
-		Shadow.Attach(button, { Transparency = 0.5 })
+		local function faceDown()
+			Motion.Tween(face, "Lip", Theme.Motion.PressDown, { Position = UDim2.fromOffset(0, LIP_DEPTH) })
+		end
+		local function faceUp()
+			Motion.Tween(face, "Lip", Theme.Motion.PressUp, { Position = UDim2.fromOffset(0, 0) })
+		end
+		button.MouseButton1Down:Connect(faceDown)
+		button.MouseButton1Up:Connect(faceUp)
+		button.MouseLeave:Connect(faceUp)
+		button.TouchLongPress:Connect(faceDown)
+		-- Activated covers touch/gamepad, where there is no Down/Up pair to
+		-- bracket the animation, so play the full dip here.
+		button.Activated:Connect(function()
+			faceDown()
+			task.delay(Theme.Motion.PressDown.Time, faceUp)
+		end)
 	end
 
-	-- Ghost has no UIStroke, so Interaction.Bind's stroke-brighten hover
-	-- feedback has nothing to act on — without this, Ghost buttons (e.g.
-	-- Skip) get zero color feedback on hover, only a 3% scale nudge.
 	if variant == "Ghost" then
-		local function applyHoverWash()
-			Motion.Tween(button, "GhostHoverBG", Theme.Motion.HoverIn, { BackgroundTransparency = GHOST_HOVER_TRANSPARENCY })
+		local function wash(on: boolean)
+			Motion.Tween(button, "GhostWash", Theme.Motion.HoverIn, { BackgroundTransparency = if on then 0.4 else 1 })
 		end
-		local function clearHoverWash()
-			Motion.Tween(button, "GhostHoverBG", Theme.Motion.HoverOut, { BackgroundTransparency = 1 })
-		end
-		button.MouseEnter:Connect(applyHoverWash)
-		button.MouseLeave:Connect(clearHoverWash)
-		button.SelectionGained:Connect(applyHoverWash)
-		button.SelectionLost:Connect(clearHoverWash)
+		button.MouseEnter:Connect(function()
+			wash(true)
+		end)
+		button.MouseLeave:Connect(function()
+			wash(false)
+		end)
+		button.SelectionGained:Connect(function()
+			wash(true)
+		end)
+		button.SelectionLost:Connect(function()
+			wash(false)
+		end)
 	end
 
 	local cleanup = Interaction.Bind(button, { OnActivated = options.OnActivated })
 	button.Destroying:Once(cleanup)
 
 	if options.Disabled then
-		Interaction.SetDisabled(button, true)
+		Button.SetDisabled(button, true)
 	end
 
 	return button
 end
 
+-- Disabled buttons desaturate toward the panel instead of only fading text,
+-- so "cannot press this" is obvious at a glance rather than a subtle tint.
 function Button.SetDisabled(button: TextButton, disabled: boolean)
 	Interaction.SetDisabled(button, disabled)
+
+	local face = button:FindFirstChild("Face") :: Frame?
+	local label = if face then face:FindFirstChild("Label") :: TextLabel? else nil
+	if not face or not label then
+		return
+	end
+
+	if disabled then
+		if face:GetAttribute("EnabledColor") == nil then
+			face:SetAttribute("EnabledColor", face.BackgroundColor3)
+			face:SetAttribute("EnabledTextColor", label.TextColor3)
+		end
+		local muted = (face:GetAttribute("EnabledColor") :: Color3):Lerp(Theme.Colors.Surface, 0.78)
+		Motion.Tween(face, "DisabledFill", Theme.Motion.HoverOut, { BackgroundColor3 = muted })
+		Motion.Tween(label, "DisabledText", Theme.Motion.HoverOut, { TextColor3 = Theme.Colors.TextMuted })
+		local gloss = face:FindFirstChild("Gloss") :: UIGradient?
+		if gloss then
+			gloss.Enabled = false
+		end
+	else
+		local enabledColor = face:GetAttribute("EnabledColor") :: Color3?
+		local enabledText = face:GetAttribute("EnabledTextColor") :: Color3?
+		if enabledColor then
+			Motion.Tween(face, "DisabledFill", Theme.Motion.HoverOut, { BackgroundColor3 = enabledColor })
+		end
+		if enabledText then
+			Motion.Tween(label, "DisabledText", Theme.Motion.HoverOut, { TextColor3 = enabledText })
+		end
+		local gloss = face:FindFirstChild("Gloss") :: UIGradient?
+		if gloss then
+			gloss.Enabled = true
+		end
+	end
 end
 
 return Button

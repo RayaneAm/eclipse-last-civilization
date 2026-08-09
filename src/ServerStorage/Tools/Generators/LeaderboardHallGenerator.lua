@@ -61,7 +61,9 @@ end
 
 local function buildRankRow(parent: Instance, rank: number)
 	local color = rankColor(rank)
-	local rowHeight = 0.069
+	-- Keep a small margin above the validator's 0.069 minimum; UDim scale
+	-- round-tripping can represent an exact 0.069 fractionally below it.
+	local rowHeight = 0.0695
 	local rowGap = 0.0035
 	local row = Instance.new("Frame")
 	row.Name = `Rank{rank}`

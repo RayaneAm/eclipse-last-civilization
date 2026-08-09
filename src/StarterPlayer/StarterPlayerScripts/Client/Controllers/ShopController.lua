@@ -29,6 +29,7 @@ local MonetizationConfig = require(ReplicatedStorage.Shared.Config.MonetizationC
 
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Motion = require(script.Parent.Parent.UI.Motion)
+local FacilityRouter = require(script.Parent.Parent.UI.FacilityRouter)
 local GamepadNav = require(script.Parent.Parent.UI.GamepadNav)
 local GlassPanel = require(script.Parent.Parent.UI.Components.GlassPanel)
 local TabStrip = require(script.Parent.Parent.UI.Components.TabStrip)
@@ -423,6 +424,14 @@ function ShopController:Init()
 	self._trove = Trove.new()
 	self:_buildShopPanel()
 	self:_buildStarterPackPanel()
+
+	-- Lets the Daily Rewards screen's "VIEW PASS" hand off to this existing
+	-- shop on an explicit press. Registered as a route rather than required
+	-- directly so no facility screen has to depend on this controller — and
+	-- so nothing here can ever be triggered automatically.
+	FacilityRouter.Register("Shop", function()
+		ShopController.OpenShop()
+	end)
 end
 
 function ShopController.OpenShop()

@@ -94,9 +94,53 @@ function DailyRewardsService.Claim(player: Player): ClaimResult
 	return result :: ClaimResult
 end
 
+-- Read-only status for the reveal UI: is a spin available right now, what is
+-- the current streak, and how long until the next reset. Uses GetAsync, NOT
+-- UpdateAsync — this must never write, never pick a reward and never grant,
+-- so opening the Daily Rewards screen can't consume the day's claim. The
+-- authoritative claim stays entirely in Claim() above.
+--
+-- On a DataStore failure it reports Available = true rather than blocking:
+-- the claim itself is still guarded by the atomic UpdateAsync, so an
+-- optimistic status can at worst show a SPIN button whose claim then comes
+-- back rejected — which the UI already handles — while the opposite
+-- (pessimistically hiding the button) would lock out a legitimate claim.
+export type StatusResult = { Available: boolean, Streak: number, SecondsUntilReset: number }
+
+function DailyRewardsService.GetStatus(player: Player): StatusResult
+	local now = os.time()
+	local secondsUntilReset = SECONDS_PER_DAY - (now % SECONDS_PER_DAY)
+
+	local ok, record = pcall(function()
+		return dailyRewardsStore:GetAsync(tostring(player.UserId))
+	end)
+
+	if not ok then
+		warn(`DailyRewardsService: status read failed for {player.Name}:`, record)
+		return { Available = true, Streak = 0, SecondsUntilReset = secondsUntilReset }
+	end
+	if not record then
+		return { Available = true, Streak = 0, SecondsUntilReset = secondsUntilReset }
+	end
+
+	local today = currentDayIndex()
+	-- A streak only survives if the last claim was today or yesterday; an
+	-- older record means the run is already broken and the next claim starts
+	-- over at 1, which is what the strip should be showing.
+	local streak = if record.LastClaimDay >= today - 1 then record.Streak else 0
+	return {
+		Available = record.LastClaimDay ~= today,
+		Streak = streak,
+		SecondsUntilReset = secondsUntilReset,
+	}
+end
+
 function DailyRewardsService:Init()
 	Net.GetFunction("RequestDailyRewardRoll").OnServerInvoke = function(player: Player)
 		return DailyRewardsService.Claim(player)
+	end
+	Net.GetFunction("RequestDailyRewardStatus").OnServerInvoke = function(player: Player)
+		return DailyRewardsService.GetStatus(player)
 	end
 end
 

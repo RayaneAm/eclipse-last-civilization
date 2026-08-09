@@ -19,6 +19,7 @@ local BaseWorldFeedbackController = {}
 
 local trackedPads: { [BasePart]: boolean } = {}
 local activePad: BasePart? = nil
+local dismissedPad: BasePart? = nil
 local previewModel: Model? = nil
 local baseSession: any = nil
 local scrapBalance = 0
@@ -77,7 +78,7 @@ local function createPreview(anchor: BasePart)
 	local model = Instance.new("Model")
 	model.Name = "LocalConstructionPreview"
 
-	previewPart(model, "Foundation", Vector3.new(footprint.X, 0.35, footprint.Z), groundCFrame * CFrame.new(0, 0.22, 0))
+	local foundation = previewPart(model, "Foundation", Vector3.new(footprint.X, 0.35, footprint.Z), groundCFrame * CFrame.new(0, 0.22, 0))
 	if pad.BuildingId == "EntranceGate" then
 		for _, side in { -1, 1 } do
 			previewPart(model, "GatePost", Vector3.new(2.4, footprint.Y, footprint.Z), groundCFrame * CFrame.new(side * (footprint.X / 2 - 1.2), footprint.Y / 2, 0))
@@ -90,6 +91,27 @@ local function createPreview(anchor: BasePart)
 		previewPart(model, "Body", Vector3.new(math.max(1, footprint.X - 1), bodyHeight, math.max(1, footprint.Z - 1)), groundCFrame * CFrame.new(0, 0.5 + bodyHeight / 2, 0))
 		previewPart(model, "Roof", Vector3.new(footprint.X + 0.6, 0.55, footprint.Z + 0.6), groundCFrame * CFrame.new(0, bodyHeight + 0.78, 0))
 	end
+
+	local label = Instance.new("BillboardGui")
+	label.Name = "PreviewLabel"
+	label.Size = UDim2.fromOffset(220, 42)
+	label.StudsOffset = Vector3.new(0, math.max(4, footprint.Y + 1), 0)
+	label.AlwaysOnTop = true
+	label.LightInfluence = 0
+	label.Parent = foundation
+	local definition = BuildingConfig.Get(pad.BuildingId)
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.fromScale(1, 1)
+	title.BackgroundColor3 = Color3.fromRGB(20, 23, 23)
+	title.BackgroundTransparency = 0.08
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(238, 239, 233)
+	title.Text = `PREVIEW  •  {string.upper(if definition then definition.Name else pad.BuildingId)}`
+	title.Parent = label
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 8)
+	titleCorner.Parent = title
 
 	model.Parent = Workspace
 	previewModel = model
@@ -149,6 +171,16 @@ local function setActivePad(nextPad: BasePart?)
 			label.Enabled = true
 		end
 		createPreview(activePad)
+	end
+end
+
+-- Called when the build confirmation is cancelled. The same nearby node is
+-- suppressed until the player actually walks away, so its full-size preview
+-- does not pop straight back on the next Heartbeat.
+function BaseWorldFeedbackController.DismissPreview(padId: string?)
+	if activePad and (padId == nil or activePad:GetAttribute("PadId") == padId) then
+		dismissedPad = activePad
+		setActivePad(nil)
 	end
 end
 
@@ -272,8 +304,11 @@ function BaseWorldFeedbackController:Start()
 		elapsed = 0
 		local nearest: BasePart? = nil
 		local nearestDistance = PersonalBaseConfig.ConstructionPreviewDistance
+		if dismissedPad and (not dismissedPad.Parent or (dismissedPad.Position - root.Position).Magnitude > nearestDistance) then
+			dismissedPad = nil
+		end
 		for anchor in trackedPads do
-			if anchor.Parent then
+			if anchor.Parent and anchor ~= dismissedPad then
 				local distance = (anchor.Position - root.Position).Magnitude
 				if distance <= nearestDistance then
 					nearest = anchor

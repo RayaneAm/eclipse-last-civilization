@@ -26,6 +26,8 @@ local Pill = require(script.Parent.Parent.UI.Components.Pill)
 local TabStrip = require(script.Parent.Parent.UI.Components.TabStrip)
 local CloseButton = require(script.Parent.Parent.UI.Components.CloseButton)
 local ItemCell = require(script.Parent.Parent.UI.Components.ItemCell)
+local ItemIcon = require(script.Parent.Parent.UI.Components.ItemIcon)
+local EmptyState = require(script.Parent.Parent.UI.Components.EmptyState)
 
 local HUDController = require(script.Parent.HUDController)
 local NotificationController = require(script.Parent.NotificationController)
@@ -37,8 +39,6 @@ local GRID_COLUMNS = 4
 -- unexplained magic "52" wherever the offset is needed.
 local RECIPE_ICON_SIZE = 40
 local RECIPE_ROW_CONTENT_OFFSET = RECIPE_ICON_SIZE + Theme.Spacing.M -- 52
-local RECIPE_INGREDIENTS_ROW_Y = 24 + Theme.Spacing.XXS -- 26 (name label height + 2px gap)
-local RECIPE_INGREDIENTS_ROW_WIDTH = 220 -- genuinely arbitrary content width, not derived from anything
 
 -- Friendlier text for CraftingService.tryCraft's raw failure reason strings
 -- (RequestCraft stays the only crafting request — this is presentation only).
@@ -52,6 +52,7 @@ local InventoryController = {}
 
 local isOpen = false
 local previousSelection: GuiObject? = nil
+local returnOnClose: (() -> ())? = nil
 
 function InventoryController:Init()
 	self._trove = Trove.new()
@@ -65,6 +66,7 @@ function InventoryController:Init()
 	screenGui.Name = "InventoryUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = 95
 	screenGui.Enabled = true
 	screenGui.Parent = playerGui
 	self._trove:Add(screenGui)
@@ -98,7 +100,7 @@ function InventoryController:Init()
 		Parent = backdrop,
 	})
 	local sizeConstraint = Instance.new("UISizeConstraint")
-	sizeConstraint.MinSize = Vector2.new(300, 360)
+	sizeConstraint.MinSize = Vector2.new(300, 300)
 	sizeConstraint.MaxSize = Vector2.new(560, 480)
 	sizeConstraint.Parent = panel
 	self._panel = panel
@@ -149,6 +151,7 @@ function InventoryController:Init()
 	inventoryGrid.CellSize = UDim2.fromOffset(96, 128)
 	inventoryGrid.CellPadding = UDim2.fromOffset(Theme.Spacing.M, Theme.Spacing.M)
 	inventoryGrid.Parent = inventoryTab
+	self._inventoryGrid = inventoryGrid
 
 	local craftingTab = Instance.new("Frame")
 	craftingTab.Name = "CraftingTab"
@@ -167,13 +170,15 @@ function InventoryController:Init()
 		Name = "Tabs",
 		Position = UDim2.new(0, 0, 0, 36),
 		Tabs = {
-			{ Id = "Inventory", Label = "Inventory" },
 			{ Id = "Crafting", Label = "Crafting" },
+			{ Id = "Inventory", Label = "Inventory" },
 		},
 		InitialTabId = "Inventory",
 		OnTabSelected = function(tabId: string)
+			title.Text = if tabId == "Crafting" then "EQUIPMENT CRAFTING" else "INVENTORY"
 			inventoryTab.Visible = tabId == "Inventory"
 			craftingTab.Visible = tabId == "Crafting"
+			panel.Size = if tabId == "Crafting" then UDim2.new(0.85, 0, 0, 300) else UDim2.new(0.85, 0, 0.68, 0)
 		end,
 		Parent = panel,
 	})
@@ -184,6 +189,7 @@ function InventoryController:Init()
 end
 
 function InventoryController:_renderInventoryTab()
+	self._inventoryGrid.CellSize = UDim2.fromOffset(96, 128)
 	for _, child in self._inventoryTab:GetChildren() do
 		if not child:IsA("UIGridLayout") then
 			child:Destroy()
@@ -200,7 +206,7 @@ function InventoryController:_renderInventoryTab()
 
 		local _cell, actionSlot = ItemCell.new({
 			Name = id,
-			Icon = display.Icon,
+			ItemId = id,
 			Label = `{name} x{quantity}`,
 			AccentColor = display.AccentColor,
 			LayoutOrder = layoutOrder,
@@ -248,15 +254,14 @@ function InventoryController:_renderInventoryTab()
 	end
 
 	if layoutOrder == 0 then
-		local empty = Instance.new("TextLabel")
-		empty.Name = "EmptyState"
-		empty.BackgroundTransparency = 1
-		empty.Size = UDim2.new(1, 0, 0, 40)
-		empty.Font = Theme.Font.Body.Font
-		empty.TextSize = Theme.Font.Body.Size
-		empty.TextColor3 = Theme.Colors.TextMuted
-		empty.Text = "Nothing gathered yet — harvest resources around Survivor Haven."
-		empty.Parent = self._inventoryTab
+		self._inventoryGrid.CellSize = UDim2.new(1, 0, 0, 152)
+		EmptyState.new({
+			Glyph = "Storage",
+			Text = "Your backpack is empty",
+			Subtext = "Harvest Wood and Stone around Survivor Haven.",
+			Card = true,
+			Parent = self._inventoryTab,
+		})
 	end
 
 	GamepadNav.LinkGrid(cellButtons, GRID_COLUMNS)
@@ -274,7 +279,7 @@ function InventoryController:_renderCraftingTab()
 
 		local row = GlassPanel.new({
 			Name = recipe.id,
-			Size = UDim2.new(1, 0, 0, 76),
+			Size = UDim2.new(1, 0, 0, 142),
 			CornerRadius = Theme.Corner.Medium,
 			AccentColor = outputDisplay.AccentColor,
 			Gradient = false,
@@ -289,37 +294,47 @@ function InventoryController:_renderCraftingTab()
 		rowPadding.PaddingBottom = UDim.new(0, Theme.Spacing.S)
 		rowPadding.Parent = row
 
-		local icon = Instance.new("TextLabel")
-		icon.BackgroundTransparency = 1
-		icon.Size = UDim2.fromOffset(RECIPE_ICON_SIZE, RECIPE_ICON_SIZE)
-		icon.Font = Enum.Font.GothamBold
-		icon.TextSize = 28
-		icon.TextColor3 = Theme.Colors.TextPrimary
-		icon.TextStrokeColor3 = Color3.new(0, 0, 0)
-		icon.TextStrokeTransparency = 0.6
-		icon.Text = outputDisplay.Icon
-		icon.Parent = row
+		ItemIcon.new({
+			Name = "OutputIcon",
+			ItemId = recipe.output.itemId,
+			Size = UDim2.fromOffset(RECIPE_ICON_SIZE, RECIPE_ICON_SIZE),
+			Parent = row,
+		})
 
 		local name = Instance.new("TextLabel")
 		name.BackgroundTransparency = 1
 		name.Position = UDim2.fromOffset(RECIPE_ROW_CONTENT_OFFSET, 0)
-		name.Size = UDim2.fromOffset(120, 24)
+		name.Size = UDim2.new(1, -RECIPE_ROW_CONTENT_OFFSET - 112, 0, 24)
 		name.Font = Theme.Font.Heading.Font
 		name.TextSize = Theme.Font.Heading.Size
 		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextTruncate = Enum.TextTruncate.AtEnd
 		name.TextColor3 = Theme.Colors.TextPrimary
 		name.Text = recipe.name
 		name.Parent = row
 
+		local description = Instance.new("TextLabel")
+		description.Name = "Description"
+		description.BackgroundTransparency = 1
+		description.Position = UDim2.fromOffset(RECIPE_ROW_CONTENT_OFFSET, 24)
+		description.Size = UDim2.new(1, -RECIPE_ROW_CONTENT_OFFSET - 112, 0, 18)
+		description.Font = Theme.Font.Caption.Font
+		description.TextSize = Theme.Font.Caption.Size
+		description.TextXAlignment = Enum.TextXAlignment.Left
+		description.TextTruncate = Enum.TextTruncate.AtEnd
+		description.TextColor3 = Theme.Colors.TextMuted
+		description.Text = if recipe.id == "Hatchet" then "Doubles Wood harvest yield." else `Craft {recipe.output.amount} {recipe.name}.`
+		description.Parent = row
+
 		local ingredientsRow = Instance.new("Frame")
-		ingredientsRow.Position = UDim2.fromOffset(RECIPE_ROW_CONTENT_OFFSET, RECIPE_INGREDIENTS_ROW_Y)
-		ingredientsRow.Size = UDim2.fromOffset(RECIPE_INGREDIENTS_ROW_WIDTH, 24)
+		ingredientsRow.Position = UDim2.new(0, RECIPE_ROW_CONTENT_OFFSET, 0, 50)
+		ingredientsRow.Size = UDim2.new(1, -RECIPE_ROW_CONTENT_OFFSET, 0, 40)
 		ingredientsRow.BackgroundTransparency = 1
 		ingredientsRow.Parent = row
 
 		local ingredientsLayout = Instance.new("UIListLayout")
 		ingredientsLayout.FillDirection = Enum.FillDirection.Horizontal
-		ingredientsLayout.Padding = UDim.new(0, Theme.Spacing.XS)
+		ingredientsLayout.Padding = UDim.new(0, Theme.Spacing.S)
 		ingredientsLayout.Parent = ingredientsRow
 
 		local allMet = true
@@ -327,19 +342,42 @@ function InventoryController:_renderCraftingTab()
 			local owned = self._inventory[ingredient.itemId] or 0
 			local met = owned >= ingredient.amount
 			allMet = allMet and met
-			local ingredientDisplay = IconGlyphs.Get(ingredient.itemId)
-			Pill.new({
-				Text = `{ingredientDisplay.Icon} {owned}/{ingredient.amount}`,
-				AccentColor = if met then Theme.Colors.Success else Theme.Colors.Danger,
-				TextColor3 = if met then Theme.Colors.Success else Theme.Colors.Danger,
-				Parent = ingredientsRow,
+			local stateColor = if met then Theme.Colors.Success else Theme.Colors.Danger
+			local requirement = Instance.new("Frame")
+			requirement.Name = `Requirement_{ingredient.itemId}`
+			requirement.Size = UDim2.fromOffset(112, 40)
+			requirement.BackgroundColor3 = Theme.Colors.CardBackground
+			requirement.BorderSizePixel = 0
+			requirement.Parent = ingredientsRow
+			local requirementCorner = Instance.new("UICorner")
+			requirementCorner.CornerRadius = Theme.Corner.Small
+			requirementCorner.Parent = requirement
+			local outline = Theme.Outline(requirement, Theme.Stroke.Thin)
+			outline.Color = stateColor
+			ItemIcon.new({
+				ItemId = ingredient.itemId,
+				Size = UDim2.fromOffset(32, 32),
+				Position = UDim2.new(0, 4, 0.5, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Flat = true,
+				Parent = requirement,
 			})
+			local amount = Instance.new("TextLabel")
+			amount.BackgroundTransparency = 1
+			amount.Position = UDim2.fromOffset(40, 0)
+			amount.Size = UDim2.new(1, -44, 1, 0)
+			amount.Font = Theme.Font.Heading.Font
+			amount.TextSize = Theme.Font.Caption.Size
+			amount.TextXAlignment = Enum.TextXAlignment.Left
+			amount.TextColor3 = stateColor
+			amount.Text = `{owned} / {ingredient.amount}`
+			amount.Parent = requirement
 		end
 
 		local feedback = Instance.new("TextLabel")
 		feedback.Name = "Feedback"
 		feedback.AnchorPoint = Vector2.new(1, 1)
-		feedback.Position = UDim2.new(1, 0, 1, -4)
+		feedback.Position = UDim2.new(1, -108, 1, -4)
 		feedback.Size = UDim2.fromOffset(160, 16)
 		feedback.BackgroundTransparency = 1
 		feedback.Font = Theme.Font.Caption.Font
@@ -351,10 +389,10 @@ function InventoryController:_renderCraftingTab()
 		feedback.Parent = row
 
 		local craftButton = Button.new({
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 0, 0, 0),
-			Size = UDim2.fromOffset(90, 40),
-			Text = "Craft",
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, 0, 1, 0),
+			Size = UDim2.fromOffset(100, 40),
+			Text = "CRAFT",
 			Disabled = not allMet,
 			OnActivated = function()
 				local ok, reasonOrTrue = Net.GetFunction("RequestCraft"):InvokeServer(recipe.id)
@@ -390,8 +428,9 @@ end
 -- interaction) force a specific tab. Works whether the panel was already
 -- open or closed — retargeting the tab is applied unconditionally, only the
 -- open animation itself is skipped if it's already open.
-function InventoryController.Open(initialTabId: string?)
+function InventoryController.Open(initialTabId: string?, onClosed: (() -> ())?)
 	local self = InventoryController
+	returnOnClose = onClosed
 
 	if not isOpen then
 		isOpen = true
@@ -417,11 +456,16 @@ function InventoryController.Close()
 	isOpen = false
 
 	local self = InventoryController
+	local callback = returnOnClose
+	returnOnClose = nil
 	local tween = Motion.Tween(self._backdrop, "Fade", Theme.Motion.PanelClose, { GroupTransparency = 1 })
 	Motion.Tween(self._panelScale, "Scale", Theme.Motion.PanelClose, { Scale = 0.94 })
 	tween.Completed:Once(function()
 		if not isOpen then
 			self._backdrop.Visible = false
+			if callback then
+				callback()
+			end
 		end
 	end)
 

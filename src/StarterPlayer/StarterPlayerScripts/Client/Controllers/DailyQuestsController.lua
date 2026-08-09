@@ -235,7 +235,7 @@ function DailyQuestsController:_render(state: PlayerSessionTypes.DailyQuestState
 	local quests = if state then state.Quests else {}
 	if #quests == 0 then
 		self._rowTrove:Add(EmptyState.new({
-			Icon = "📋",
+			Glyph = "Gift",
 			Text = "No daily quests yet",
 			-- Kept short on purpose: EmptyState's subtext uses AutomaticSize.X,
 			-- so a long line grows the label instead of wrapping it.

@@ -120,13 +120,22 @@ local function buildCivilizationCore(parent: Instance, baseCFrame: CFrame)
 	-- Opens the Base Management UI (BaseUIController) — the Core's status
 	-- display doubles as the main access point, per the brief's "provides
 	-- access to base overview information."
+	-- The plinth itself is almost twenty studs deep. A prompt parented directly
+	-- to its center is outside the reachable/front-facing interaction point, so
+	-- keep the prompt on an attachment at the front edge without changing any
+	-- visible base geometry.
+	local corePromptAttachment = Instance.new("Attachment")
+	corePromptAttachment.Name = "BaseCorePromptAttachment"
+	corePromptAttachment.Position = Vector3.new(0, 3, -CORE_RADIUS * 1.06)
+	corePromptAttachment.Parent = plinth
+
 	local corePrompt = Instance.new("ProximityPrompt")
 	corePrompt.Name = "BaseCorePrompt"
 	corePrompt.ObjectText = "Civilization Core"
 	corePrompt.ActionText = "Manage Base"
 	corePrompt.MaxActivationDistance = 16
 	corePrompt.RequiresLineOfSight = false
-	corePrompt.Parent = plinth
+	corePrompt.Parent = corePromptAttachment
 	CollectionService:AddTag(plinth, "BaseCoreTerminal")
 
 	GeneratorKit.NewPart({
@@ -771,7 +780,7 @@ local function buildPadGhost(container: Instance, baseCFrame: CFrame, pad: Bluep
 	icon.Font = Enum.Font.GothamBlack
 	icon.TextScaled = true
 	icon.TextColor3 = accent
-	icon.Text = "+  BUILD"
+	icon.Text = if pad.BuildingId == "Wall" then "+  WALL" elseif pad.BuildingId == "EntranceGate" then "+  GATE" else "+  BUILD"
 	icon.Parent = iconSurface
 
 	local labelGui = Instance.new("BillboardGui")
@@ -790,7 +799,11 @@ local function buildPadGhost(container: Instance, baseCFrame: CFrame, pad: Bluep
 	title.Font = Enum.Font.GothamBlack
 	title.TextScaled = true
 	title.TextColor3 = Color3.fromRGB(238, 239, 233)
-	title.Text = if definition then string.upper(definition.Name) else string.upper(pad.BuildingId)
+	title.Text = if pad.BuildingId == "Wall"
+		then "BUILD WOOD WALL"
+		elseif pad.BuildingId == "EntranceGate"
+		then "BUILD ENTRANCE GATE"
+		else (if definition then string.upper(definition.Name) else string.upper(pad.BuildingId))
 	title.Parent = labelGui
 	local cost = Instance.new("TextLabel")
 	cost.BackgroundColor3 = accent
@@ -946,6 +959,30 @@ local CATEGORY_COLOR = {
 	Defense = Color3.fromRGB(130, 60, 60),
 	Civilization = Color3.fromRGB(120, 100, 180),
 }
+
+-- Attaches the standard "press E to open this facility's screen" prompt.
+-- Added with the facility UI pass: the Generator, Workbench, Defense Control
+-- and Survivor Quarters were previously built as pure decoration with no
+-- interaction at all, so their (now real) screens had no way to be reached.
+--
+-- The OwnerUserId + StructureId attributes are what the client's
+-- FacilityPrompts helper reads to confirm the structure belongs to the local
+-- player and to tell the screen which structure it is looking at. Matches
+-- the existing Storage/Production terminal wiring exactly.
+local function addFacilityPrompt(host: BasePart, userId: number, structureId: string, objectText: string, actionText: string, tag: string)
+	host:SetAttribute("OwnerUserId", userId)
+	host:SetAttribute("StructureId", structureId)
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "FacilityPrompt"
+	prompt.ObjectText = objectText
+	prompt.ActionText = actionText
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = host
+
+	CollectionService:AddTag(host, tag)
+end
 
 function PersonalBaseGenerator.BuildStructure(userId: number, origin: CFrame, structure: any, animateConstruction: boolean?)
 	local container = structuresContainer(userId)
@@ -1194,6 +1231,9 @@ function PersonalBaseGenerator.BuildStructure(userId: number, origin: CFrame, st
 		labelHost:SetAttribute("OwnerUserId", userId)
 		CollectionService:AddTag(labelHost, "BaseStorageTerminal")
 	elseif structure.BuildingId == "Workbench" then
+		-- The workbench doubles as the base's Upgrade Station: it opens the
+		-- "what can I improve right now" browser.
+		addFacilityPrompt(labelHost, userId, structure.Id, "Upgrade Station", "Open Upgrades", "BaseUpgradeStation")
 		GeneratorKit.NewPart({
 			Name = "WorkSurface",
 			Size = Vector3.new(7.5, 0.5, 3.4),
@@ -1215,6 +1255,7 @@ function PersonalBaseGenerator.BuildStructure(userId: number, origin: CFrame, st
 			})
 		end
 	elseif structure.BuildingId == "Generator" then
+		addFacilityPrompt(labelHost, userId, structure.Id, "Basic Generator", "Manage Power", "BaseGeneratorTerminal")
 		local engine = GeneratorKit.NewPart({
 			Name = "GeneratorEngine",
 			Size = Vector3.new(6.5, 4.2, 5.5),
@@ -1313,6 +1354,7 @@ function PersonalBaseGenerator.BuildStructure(userId: number, origin: CFrame, st
 		statusPanel:SetAttribute("CompletesAt", 0)
 		CollectionService:AddTag(statusPanel, "BaseProductionMachine")
 	elseif structure.BuildingId == "DefenseControl" then
+		addFacilityPrompt(labelHost, userId, structure.Id, "Defense Control", "View Perimeter", "BaseDefenseTerminal")
 		GeneratorKit.NewPart({
 			Name = "WarningMast",
 			Size = Vector3.new(0.6, 8, 0.6),
@@ -1332,6 +1374,7 @@ function PersonalBaseGenerator.BuildStructure(userId: number, origin: CFrame, st
 			Parent = model,
 		})
 	elseif structure.BuildingId == "SurvivorQuarters" then
+		addFacilityPrompt(labelHost, userId, structure.Id, "Survivor Quarters", "Inspect", "BaseQuartersTerminal")
 		for index, x in { -3.5, 0, 3.5 } do
 			GeneratorKit.NewPart({
 				Name = `QuarterWindow{index}`,
