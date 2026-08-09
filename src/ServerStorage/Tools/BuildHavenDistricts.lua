@@ -7,7 +7,7 @@ local HavenFacilityConfig = require(ReplicatedStorage.Shared.Config.HavenFacilit
 local HavenLayoutConfig = require(ReplicatedStorage.Shared.Config.HavenLayoutConfig)
 local WorldMapConfig = require(ReplicatedStorage.Shared.Config.WorldMapConfig)
 local CivicBuildingGenerator = require(script.Parent.Generators.CivicBuildingGenerator)
-local GuidanceGenerator = require(script.Parent.Generators.GuidanceGenerator)
+local CampCircleGenerator = require(script.Parent.Generators.CampCircleGenerator)
 local LeaderboardHallGenerator = require(script.Parent.Generators.LeaderboardHallGenerator)
 
 local ROOT_NAME = "HavenDistricts_Generated"
@@ -58,11 +58,16 @@ function BuildHavenDistricts.Run()
 			count += 1
 		end
 	end
-	GuidanceGenerator.Build(
+	-- The Haven Guide installation that used to stand here (NPC, booth, map
+	-- stand, direction board, "HAVEN GUIDE" sign) is gone. The plot is now the
+	-- settlement's communal fire circle.
+	CampCircleGenerator.Build(
 		root,
-		origin,
-		origin:PointToWorldSpace(HavenLayoutConfig.GUIDE_LOCAL_POSITION),
-		Color3.fromRGB(120, 220, 140)
+		HavenLayoutConfig.CFrameFacing(
+			origin,
+			HavenLayoutConfig.CAMP_CIRCLE_LOCAL_POSITION,
+			HavenLayoutConfig.SPAWN_LOCAL_POSITION
+		)
 	)
 	local leaderboardHall = LeaderboardHallGenerator.Build(
 		root,
@@ -79,7 +84,7 @@ function BuildHavenDistricts.Run()
 		leaderboardHall:GetFullName() == `Workspace.{ROOT_NAME}.{LEADERBOARD_NAME}`,
 		`[BuildHavenDistricts] Unexpected Leaderboards path: {leaderboardHall:GetFullName()}`
 	)
-	print(`[BuildHavenDistricts] Built {count} staffed physical services, guidance, and exactly one current Leaderboards hall.`)
+	print(`[BuildHavenDistricts] Built {count} staffed physical services, the camp fire circle, and exactly one current Leaderboards hall.`)
 end
 
 return BuildHavenDistricts

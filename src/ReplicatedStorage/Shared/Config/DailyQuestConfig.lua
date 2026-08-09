@@ -1,6 +1,7 @@
 --!strict
--- The Daily Quest pool: what a daily objective can BE, what it's worth, and
--- when a player is allowed to be handed one. A flat, data-only list in the
+-- The Daily Quest pool: what a daily objective can BE and what it's worth.
+-- The active three are selected once from SharedPoolIds using only the UTC
+-- day index, so every server and every player sees the same rotation.
 -- same spirit as QuestConfig/DailyRewardConfig — DailyQuestService advances
 -- every objective off already-validated server Signals plus this table, and
 -- DailyQuestsController only ever RENDERS what's here. Adding an objective is
@@ -291,6 +292,36 @@ end
 
 function DailyQuestConfig.Get(id: string): DailyQuestDefinition?
 	return byId[id]
+end
+
+-- Only objectives that remain reasonable for every survivor after onboarding
+-- participate in the shared rotation. Player-specific base/resource
+-- availability must never influence the active IDs.
+DailyQuestConfig.SharedPoolIds = {
+	"CraftItems",
+	"CraftTool",
+	"EnterForestWildlands",
+	"CompleteExpedition",
+	"EarnScrap",
+	"UseFacilities",
+}
+
+function DailyQuestConfig.SharedDailyIds(dayIndex: number?): { string }
+	local day = dayIndex or DailyQuestConfig.CurrentDayIndex()
+	local candidates = table.clone(DailyQuestConfig.SharedPoolIds)
+	local rng = Random.new(day)
+	for index = #candidates, 2, -1 do
+		local swapWith = rng:NextInteger(1, index)
+		candidates[index], candidates[swapWith] = candidates[swapWith], candidates[index]
+	end
+
+	local selected: { string } = {}
+	for index = 1, DailyQuestConfig.QUESTS_PER_DAY do
+		local id = assert(candidates[index], "DailyQuestConfig.SharedPoolIds must contain at least QUESTS_PER_DAY ids")
+		assert(byId[id], `DailyQuestConfig.SharedPoolIds contains unknown id "{id}"`)
+		table.insert(selected, id)
+	end
+	return selected
 end
 
 -- ---------------------------------------------------------------------

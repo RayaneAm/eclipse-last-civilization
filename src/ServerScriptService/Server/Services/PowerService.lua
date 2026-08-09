@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage.Shared.Modules.Net)
 local BuildingConfig = require(ReplicatedStorage.Shared.Config.BuildingConfig)
 local PersonalBaseConfig = require(ReplicatedStorage.Shared.Config.PersonalBaseConfig)
+local ProductionRecipeConfig = require(ReplicatedStorage.Shared.Config.ProductionRecipeConfig)
 
 local BaseService = require(script.Parent.BaseService)
 
@@ -44,6 +45,16 @@ function PowerService.CurrentConsumption(session): number
 				if definition then
 					total += definition.PowerDraw
 				end
+			end
+		end
+	end
+	-- Running jobs reserve their recipe operating draw. Completed/ready jobs
+	-- have stopped moving and no longer consume operating power.
+	for _, job in session.ProductionJobs do
+		if not job.Collected and os.time() < job.CompletesAt then
+			local recipe = ProductionRecipeConfig.Get(job.RecipeId)
+			if recipe then
+				total += recipe.PowerDraw
 			end
 		end
 	end

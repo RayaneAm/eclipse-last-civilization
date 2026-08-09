@@ -7,12 +7,9 @@
 -- BasePermissionService for why that's a plain ownership check, not a
 -- collision-group trick.
 --
--- CFrames sent by the client are always LOCAL to the base's own origin, not
--- a world CFrame — bounds/overlap validation works in that local space, and
--- the server composes with BaseService's own resolved world origin only at
--- the moment a physical part is actually spawned. This avoids ever trusting
--- a client-claimed world position, the same principle PortalService already
--- established for travel.
+-- CFrames sent by the client are world-space previews. The server converts
+-- them through its own resolved base origin before any local-space bounds or
+-- overlap validation; the client never supplies the trusted origin.
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,7 +23,6 @@ local BaseSessionTypes = require(ReplicatedStorage.Shared.Config.BaseSessionType
 local BlueprintLayoutConfig = require(ReplicatedStorage.Shared.Config.BlueprintLayoutConfig)
 
 local BaseService = require(script.Parent.BaseService)
-local InventoryService = require(script.Parent.InventoryService)
 local CurrencyService = require(script.Parent.CurrencyService)
 
 local BuildingService = {}
@@ -37,16 +33,38 @@ local BuildingService = {}
 BuildingService.StructureBuilt = Signal.new() -- (player, buildingId, structureId)
 BuildingService.StructureUpgraded = Signal.new() -- (player, newBuildingId, structureId)
 
-local function withinBounds(localCFrame: CFrame): boolean
-	local pos = localCFrame.Position
-	local bounds = PersonalBaseConfig.PlotBounds
-	return math.abs(pos.X) <= bounds.HalfWidth and math.abs(pos.Z) <= bounds.HalfDepth
+local function footprintFor(buildingId: string, padId: string?): Vector3
+	local pad = padId and BlueprintLayoutConfig.Get(padId) or nil
+	return if pad then BlueprintLayoutConfig.GetFootprintSize(pad, buildingId) else BuildingConfig.GetFootprintSize(buildingId)
 end
 
-local function withinFreeformZone(localCFrame: CFrame): boolean
-	local pos = localCFrame.Position
+local function cframeFor(buildingId: string, localCFrame: CFrame, padId: string?): CFrame
+	local pad = padId and BlueprintLayoutConfig.Get(padId) or nil
+	return if pad then BlueprintLayoutConfig.GetStructureLocalCFrame(pad, buildingId) else localCFrame
+end
+
+local function footprintExtents(buildingId: string, localCFrame: CFrame, padId: string?): (number, number)
+	local size = footprintFor(buildingId, padId)
+	local resolvedCFrame = cframeFor(buildingId, localCFrame, padId)
+	local right = resolvedCFrame.RightVector
+	local look = resolvedCFrame.LookVector
+	local halfX = math.abs(right.X) * size.X / 2 + math.abs(look.X) * size.Z / 2
+	local halfZ = math.abs(right.Z) * size.X / 2 + math.abs(look.Z) * size.Z / 2
+	return halfX, halfZ
+end
+
+local function withinBounds(buildingId: string, localCFrame: CFrame, padId: string?): boolean
+	local pos = cframeFor(buildingId, localCFrame, padId).Position
+	local bounds = PersonalBaseConfig.PlotBounds
+	local halfX, halfZ = footprintExtents(buildingId, localCFrame, padId)
+	return math.abs(pos.X) + halfX <= bounds.HalfWidth and math.abs(pos.Z) + halfZ <= bounds.HalfDepth
+end
+
+local function withinFreeformZone(buildingId: string, localCFrame: CFrame, padId: string?): boolean
+	local pos = cframeFor(buildingId, localCFrame, padId).Position
 	local zone = PersonalBaseConfig.FreeformZone
-	return pos.X >= zone.MinX and pos.X <= zone.MaxX and pos.Z >= zone.MinZ and pos.Z <= zone.MaxZ
+	local halfX, halfZ = footprintExtents(buildingId, localCFrame, padId)
+	return pos.X - halfX >= zone.MinX and pos.X + halfX <= zone.MaxX and pos.Z - halfZ >= zone.MinZ and pos.Z + halfZ <= zone.MaxZ
 end
 
 local function insideProtectedZone(localCFrame: CFrame): boolean
@@ -60,30 +78,35 @@ local function insideProtectedZone(localCFrame: CFrame): boolean
 	return false
 end
 
--- Phase 4A.1: real footprint check, not a fixed point-distance radius —
--- "validate the actual building footprint, not only the pad center point."
--- Deliberately a conservative CIRCLE approximation (each footprint's own
--- half-diagonal as its radius) rather than a true oriented-rectangle (SAT)
--- test: footprints here can sit at arbitrary rotations (the 8 perimeter
--- wall pads are spaced every 45°), and a circle can never under-detect a
--- real overlap — it may occasionally reject a placement that a tighter
--- rectangle test would have allowed near a shared corner, which is the
--- safe direction to be wrong in for a collision check.
-local function footprintRadius(size: Vector3): number
-	return math.sqrt((size.X / 2) ^ 2 + (size.Z / 2) ^ 2)
+-- True oriented-rectangle SAT footprint check. This lets authored perimeter
+-- pieces meet cleanly edge-to-edge while still rejecting any real overlap;
+-- the former bounding-circle approximation could not represent a long wall.
+local function horizontalUnit(vector: Vector3): Vector2
+	return Vector2.new(vector.X, vector.Z).Unit
 end
 
-local function footprintsOverlap(posA: Vector3, sizeA: Vector3, posB: Vector3, sizeB: Vector3): boolean
-	local flatA, flatB = Vector3.new(posA.X, 0, posA.Z), Vector3.new(posB.X, 0, posB.Z)
-	return (flatA - flatB).Magnitude < footprintRadius(sizeA) + footprintRadius(sizeB)
+local function footprintsOverlap(cframeA: CFrame, sizeA: Vector3, cframeB: CFrame, sizeB: Vector3): boolean
+	local axesA = { horizontalUnit(cframeA.RightVector), horizontalUnit(cframeA.LookVector) }
+	local axesB = { horizontalUnit(cframeB.RightVector), horizontalUnit(cframeB.LookVector) }
+	local delta = Vector2.new(cframeB.Position.X - cframeA.Position.X, cframeB.Position.Z - cframeA.Position.Z)
+	for _, axis in { axesA[1], axesA[2], axesB[1], axesB[2] } do
+		local radiusA = math.abs(axesA[1]:Dot(axis)) * sizeA.X / 2 + math.abs(axesA[2]:Dot(axis)) * sizeA.Z / 2
+		local radiusB = math.abs(axesB[1]:Dot(axis)) * sizeB.X / 2 + math.abs(axesB[2]:Dot(axis)) * sizeB.Z / 2
+		if math.abs(delta:Dot(axis)) >= radiusA + radiusB - 0.01 then
+			return false
+		end
+	end
+	return true
 end
 
-local function overlapsExisting(session: BaseSessionTypes.BaseSessionData, buildingId: string, localCFrame: CFrame, excludeStructureId: string?): boolean
-	local footprint = BuildingConfig.GetFootprintSize(buildingId)
+local function overlapsExisting(session: BaseSessionTypes.BaseSessionData, buildingId: string, localCFrame: CFrame, padId: string?, excludeStructureId: string?): boolean
+	local footprint = footprintFor(buildingId, padId)
+	local resolvedCFrame = cframeFor(buildingId, localCFrame, padId)
 	for id, structure in session.Structures do
 		if id ~= excludeStructureId then
-			local otherFootprint = BuildingConfig.GetFootprintSize(structure.BuildingId)
-			if footprintsOverlap(localCFrame.Position, footprint, structure.CFrame.Position, otherFootprint) then
+			local otherFootprint = footprintFor(structure.BuildingId, structure.PadId)
+			local otherCFrame = cframeFor(structure.BuildingId, structure.CFrame, structure.PadId)
+			if footprintsOverlap(resolvedCFrame, footprint, otherCFrame, otherFootprint) then
 				return true
 			end
 		end
@@ -98,39 +121,53 @@ end
 local function overlapsAnyPad(buildingId: string, localCFrame: CFrame): boolean
 	local footprint = BuildingConfig.GetFootprintSize(buildingId)
 	for _, pad in BlueprintLayoutConfig.All do
-		local padFootprint = BuildingConfig.GetFootprintSize(pad.BuildingId)
-		if footprintsOverlap(localCFrame.Position, footprint, pad.LocalCFrame.Position, padFootprint) then
+		local padFootprint = BlueprintLayoutConfig.GetFootprintSize(pad)
+		local padCFrame = BlueprintLayoutConfig.GetStructureLocalCFrame(pad)
+		if footprintsOverlap(localCFrame, footprint, padCFrame, padFootprint) then
 			return true
 		end
 	end
 	return false
 end
 
-local function canAfford(player: Player, cost: BuildingConfig.BuildingCost): boolean
+local function canAfford(player: Player, session: BaseSessionTypes.BaseSessionData, cost: BuildingConfig.BuildingCost): boolean
 	for itemId, amount in cost.Materials do
-		if not InventoryService.HasAtLeast(player, itemId, amount) then
+		if (session.Storage[itemId] or 0) < amount then
 			return false
 		end
 	end
 	return CurrencyService.GetBalance(player) >= cost.Scrap
 end
 
-local function chargeCost(player: Player, cost: BuildingConfig.BuildingCost)
+local function chargeCost(player: Player, session: BaseSessionTypes.BaseSessionData, cost: BuildingConfig.BuildingCost)
 	for itemId, amount in cost.Materials do
-		InventoryService.RemoveItem(player, itemId, amount)
+		session.Storage[itemId] -= amount
 	end
 	if cost.Scrap > 0 then
 		CurrencyService.Remove(player, cost.Scrap)
 	end
 end
 
-local function spawnStructurePart(hostUserId: number, structure: BaseSessionTypes.StructureInstance)
+local function spawnStructurePart(hostUserId: number, structure: BaseSessionTypes.StructureInstance, animateConstruction: boolean?)
 	local origin = BaseService.GetResolvedOrigin(hostUserId)
 	if not origin then
 		return
 	end
 	local PersonalBaseGenerator = require(ServerStorage.Tools.Generators.PersonalBaseGenerator)
-	PersonalBaseGenerator.BuildStructure(hostUserId, origin, structure)
+	PersonalBaseGenerator.BuildStructure(hostUserId, origin, structure, animateConstruction == true)
+end
+
+local function hasBuilding(session: BaseSessionTypes.BaseSessionData, buildingId: string): boolean
+	for _, structure in session.Structures do
+		if structure.BuildingId == buildingId then
+			return true
+		end
+	end
+	return false
+end
+
+local function meetsBuildingPrerequisite(session: BaseSessionTypes.BaseSessionData, definition: BuildingConfig.BuildingDefinition): boolean
+	return not definition.PrerequisiteBuildingId or hasBuilding(session, definition.PrerequisiteBuildingId)
 end
 
 local function removeStructurePart(hostUserId: number, structureId: string)
@@ -152,13 +189,20 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 	if not definition then
 		return false, "UnknownBuilding"
 	end
+	if not meetsBuildingPrerequisite(session, definition) then
+		return false, "MissingPrerequisite"
+	end
 
-	-- Phase 4A.1: freeform placement is now confined to the one marked
-	-- Freeform Zone — core progression structures go through their
+	-- Freeform placement stays inside the settlement rectangle. Core
+	-- progression structures go through their
 	-- blueprint pad (RequestBuildBlueprint) instead, which needs none of
 	-- these checks since its transform is server-authored, not client-sent.
-	local localCFrame = payload.CFrame
-	if not withinBounds(localCFrame) or not withinFreeformZone(localCFrame) then
+	local origin = BaseService.GetResolvedOrigin(player.UserId)
+	if not origin then
+		return false, "BaseNotReady"
+	end
+	local localCFrame = origin:ToObjectSpace(payload.CFrame)
+	if not withinBounds(payload.BuildingId, localCFrame, nil) or not withinFreeformZone(payload.BuildingId, localCFrame, nil) then
 		return false, "OutOfBounds"
 	end
 	if insideProtectedZone(localCFrame) then
@@ -167,7 +211,7 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 	if overlapsAnyPad(payload.BuildingId, localCFrame) then
 		return false, "ProtectedZone"
 	end
-	if overlapsExisting(session, payload.BuildingId, localCFrame, nil) then
+	if overlapsExisting(session, payload.BuildingId, localCFrame, nil, nil) then
 		return false, "Overlap"
 	end
 
@@ -180,11 +224,11 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 		return false, "BuildingLimitReached"
 	end
 
-	if not canAfford(player, definition.Cost) then
+	if not canAfford(player, session, definition.Cost) then
 		return false, "CannotAfford"
 	end
 
-	chargeCost(player, definition.Cost)
+	chargeCost(player, session, definition.Cost)
 
 	local structureId = HttpService:GenerateGUID(false)
 	local structure: BaseSessionTypes.StructureInstance = {
@@ -192,7 +236,7 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 		BuildingId = definition.Id,
 		CFrame = localCFrame,
 		Level = 1,
-		Health = 100,
+		Health = BuildingConfig.GetMaxHealth(definition.Id),
 		Enabled = if definition.PowerDraw > 0 then false else nil,
 	}
 	session.Structures[structureId] = structure
@@ -200,7 +244,7 @@ local function requestPlaceBuilding(player: Player, payload: { BuildingId: strin
 	local points = PersonalBaseConfig.InvestmentPoints.StructureBuilt[definition.Category] or 1
 	BaseService.AddInvestment(player.UserId, points)
 
-	spawnStructurePart(player.UserId, structure)
+	spawnStructurePart(player.UserId, structure, true)
 	BuildingService.StructureBuilt:Fire(player, definition.Id, structureId)
 	BaseService.BroadcastState(player.UserId)
 
@@ -212,7 +256,7 @@ end
 -- one, which is why OutOfBounds is structurally impossible here (see the
 -- freeform-only bounds checks above). Layered duplicate protection per the
 -- approved migration-hardening plan section: (1) the primary, authoritative
--- PadId-linked check, correct once BaseService.migrateStructuresToPads has
+	-- PadId-linked check, correct once BaseSessionMigration has
 -- run on load; (2) a defensive secondary check for single-instance pad
 -- groups, covering the pathological case of migration somehow not having
 -- run yet; (3) a genuine footprint-overlap check, not a reuse of
@@ -230,6 +274,9 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 	local session = BaseService.Get(player.UserId)
 	if not session then
 		return false, "BaseNotReady"
+	end
+	if not BlueprintLayoutConfig.IsUnlocked(pad, session.Structures) then
+		return false, "MissingPrerequisite"
 	end
 
 	for _, structure in session.Structures do
@@ -262,6 +309,9 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 	if not definition then
 		return false, "UnknownBuilding"
 	end
+	if not meetsBuildingPrerequisite(session, definition) then
+		return false, "MissingPrerequisite"
+	end
 
 	-- Genuine footprint-overlap tests, deliberately NOT a blanket
 	-- insideProtectedZone reuse: EntranceGate_1 is intentionally positioned
@@ -270,20 +320,22 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 	-- the entrance gate's own legitimate, authored pad. A pad never
 	-- conflicts with itself, so "every other pad" naturally excludes it
 	-- without special-casing.
-	local padFootprint = BuildingConfig.GetFootprintSize(pad.BuildingId)
+	local padFootprint = BlueprintLayoutConfig.GetFootprintSize(pad)
+	local padCFrame = BlueprintLayoutConfig.GetStructureLocalCFrame(pad)
 	local coreFootprint = BuildingConfig.GetFootprintSize("CivilizationCore")
-	if footprintsOverlap(pad.LocalCFrame.Position, padFootprint, PersonalBaseConfig.CoreLocalPosition, coreFootprint) then
+	if footprintsOverlap(padCFrame, padFootprint, CFrame.new(PersonalBaseConfig.CoreLocalPosition), coreFootprint) then
 		return false, "ProtectedZone"
 	end
 	for _, otherPad in BlueprintLayoutConfig.All do
 		if otherPad.PadId ~= pad.PadId then
-			local otherFootprint = BuildingConfig.GetFootprintSize(otherPad.BuildingId)
-			if footprintsOverlap(pad.LocalCFrame.Position, padFootprint, otherPad.LocalCFrame.Position, otherFootprint) then
+			local otherFootprint = BlueprintLayoutConfig.GetFootprintSize(otherPad)
+			local otherCFrame = BlueprintLayoutConfig.GetStructureLocalCFrame(otherPad)
+			if footprintsOverlap(padCFrame, padFootprint, otherCFrame, otherFootprint) then
 				return false, "ProtectedZone"
 			end
 		end
 	end
-	if overlapsExisting(session, pad.BuildingId, pad.LocalCFrame, nil) then
+	if overlapsExisting(session, pad.BuildingId, pad.LocalCFrame, pad.PadId, nil) then
 		return false, "Overlap"
 	end
 
@@ -296,11 +348,11 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 		return false, "BuildingLimitReached"
 	end
 
-	if not canAfford(player, definition.Cost) then
+	if not canAfford(player, session, definition.Cost) then
 		return false, "CannotAfford"
 	end
 
-	chargeCost(player, definition.Cost)
+	chargeCost(player, session, definition.Cost)
 
 	local structureId = HttpService:GenerateGUID(false)
 	local structure: BaseSessionTypes.StructureInstance = {
@@ -308,7 +360,7 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 		BuildingId = definition.Id,
 		CFrame = pad.LocalCFrame,
 		Level = 1,
-		Health = 100,
+		Health = BuildingConfig.GetMaxHealth(definition.Id),
 		Enabled = if definition.PowerDraw > 0 then false else nil,
 		PadId = pad.PadId,
 	}
@@ -317,7 +369,12 @@ local function requestBuildBlueprint(player: Player, payload: { PadId: string })
 	local points = PersonalBaseConfig.InvestmentPoints.StructureBuilt[definition.Category] or 1
 	BaseService.AddInvestment(player.UserId, points)
 
-	spawnStructurePart(player.UserId, structure)
+	spawnStructurePart(player.UserId, structure, true)
+	local origin = BaseService.GetResolvedOrigin(player.UserId)
+	if origin then
+		local PersonalBaseGenerator = require(ServerStorage.Tools.Generators.PersonalBaseGenerator)
+		PersonalBaseGenerator.RefreshBlueprintPads(player.UserId, origin, session)
+	end
 	BuildingService.StructureBuilt:Fire(player, definition.Id, structureId)
 	BaseService.BroadcastState(player.UserId)
 
@@ -340,8 +397,12 @@ local function requestMoveBuilding(player: Player, payload: { StructureId: strin
 		return false, "CoreCannotMove"
 	end
 
-	local localCFrame = payload.CFrame
-	if not withinBounds(localCFrame) or not withinFreeformZone(localCFrame) then
+	local origin = BaseService.GetResolvedOrigin(player.UserId)
+	if not origin then
+		return false, "BaseNotReady"
+	end
+	local localCFrame = origin:ToObjectSpace(payload.CFrame)
+	if not withinBounds(structure.BuildingId, localCFrame, structure.PadId) or not withinFreeformZone(structure.BuildingId, localCFrame, structure.PadId) then
 		return false, "OutOfBounds"
 	end
 	if insideProtectedZone(localCFrame) then
@@ -350,7 +411,7 @@ local function requestMoveBuilding(player: Player, payload: { StructureId: strin
 	if overlapsAnyPad(structure.BuildingId, localCFrame) then
 		return false, "ProtectedZone"
 	end
-	if overlapsExisting(session, structure.BuildingId, localCFrame, payload.StructureId) then
+	if overlapsExisting(session, structure.BuildingId, localCFrame, structure.PadId, payload.StructureId) then
 		return false, "Overlap"
 	end
 
@@ -381,16 +442,27 @@ local function requestUpgradeBuilding(player: Player, payload: { StructureId: st
 	if not nextDef then
 		return false, "NoUpgradeAvailable"
 	end
+	if structure.PadId then
+		local pad = BlueprintLayoutConfig.Get(structure.PadId)
+		if not pad or not BlueprintLayoutConfig.AcceptsBuilding(pad, nextDef.Id) then
+			return false, "InvalidUpgradePath"
+		end
+	end
 	-- Upgrade always requires the current structure PLUS new materials —
 	-- never a Scrap-only path (enforced structurally: every upgrade recipe
 	-- in BuildingConfig has a non-empty Materials list).
-	if not canAfford(player, nextDef.Cost) then
+	if not canAfford(player, session, nextDef.Cost) then
 		return false, "CannotAfford"
 	end
 
-	chargeCost(player, nextDef.Cost)
+	chargeCost(player, session, nextDef.Cost)
 	structure.BuildingId = nextDef.Id
 	structure.Level += 1
+	structure.Health = BuildingConfig.GetMaxHealth(nextDef.Id)
+	if nextDef.PowerDraw > 0 and session.Power.Enabled[payload.StructureId] == nil then
+		session.Power.Enabled[payload.StructureId] = false
+		structure.Enabled = false
+	end
 
 	local points = PersonalBaseConfig.InvestmentPoints.StructureUpgraded[nextDef.Category] or 1
 	BaseService.AddInvestment(player.UserId, points)
@@ -413,7 +485,8 @@ local function requestRepairBuilding(player: Player, payload: { StructureId: str
 	if not structure then
 		return false, "UnknownStructure"
 	end
-	if structure.Health >= 100 then
+	local maxHealth = BuildingConfig.GetMaxHealth(structure.BuildingId)
+	if structure.Health >= maxHealth then
 		return false, "AlreadyFullHealth"
 	end
 
@@ -424,17 +497,17 @@ local function requestRepairBuilding(player: Player, payload: { StructureId: str
 	if not definition then
 		return false, "UnknownBuilding"
 	end
-	local missingFraction = (100 - structure.Health) / 100
+	local missingFraction = (maxHealth - structure.Health) / maxHealth
 	local repairCost: BuildingConfig.BuildingCost = { Materials = {}, Scrap = math.ceil(definition.Cost.Scrap * missingFraction * 0.5) }
 	for itemId, amount in definition.Cost.Materials do
 		repairCost.Materials[itemId] = math.ceil(amount * missingFraction * 0.5)
 	end
 
-	if not canAfford(player, repairCost) then
+	if not canAfford(player, session, repairCost) then
 		return false, "CannotAfford"
 	end
-	chargeCost(player, repairCost)
-	structure.Health = 100
+	chargeCost(player, session, repairCost)
+	structure.Health = maxHealth
 
 	BaseService.BroadcastState(player.UserId)
 	return true
@@ -462,14 +535,13 @@ local function requestDismantleBuilding(player: Player, payload: { StructureId: 
 	removeStructurePart(player.UserId, payload.StructureId)
 
 	-- Dismantling a pad-linked structure frees its guided-progression slot
-	-- back up — restore that one pad's ghost so it's buildable again,
-	-- without a full rebuild/rejoin (PersonalBaseGenerator.RestoreBlueprintPad
-	-- is idempotent, so this is safe even if called more than once).
+	-- back up. Refresh derives the entire visible lot set from session state,
+	-- so dependencies such as DefenseControl -> perimeter stay correct.
 	if padId then
 		local origin = BaseService.GetResolvedOrigin(player.UserId)
 		if origin then
 			local PersonalBaseGenerator = require(ServerStorage.Tools.Generators.PersonalBaseGenerator)
-			PersonalBaseGenerator.RestoreBlueprintPad(player.UserId, origin, padId)
+			PersonalBaseGenerator.RefreshBlueprintPads(player.UserId, origin, session)
 		end
 	end
 

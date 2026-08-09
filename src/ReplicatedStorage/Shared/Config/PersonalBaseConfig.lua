@@ -16,10 +16,26 @@ PersonalBaseConfig.GridOrigin = Vector3.new(200000, 0, 0)
 PersonalBaseConfig.GridWidth = 500 -- cells per row before wrapping to the next row
 PersonalBaseConfig.CellSize = 1000 -- studs between adjacent base plot centers
 
+-- Definitive rectangular world composition. These values are shared by the
+-- runtime generator and validators so the settlement/buffer/forest ratios
+-- cannot silently drift apart in a later visual pass.
+PersonalBaseConfig.WorldWidth = 480
+PersonalBaseConfig.WorldDepth = 410
+PersonalBaseConfig.SettlementWidth = 240
+PersonalBaseConfig.SettlementDepth = 180
+PersonalBaseConfig.ForestInnerHalfWidth = 175
+PersonalBaseConfig.ForestInnerHalfDepth = 145
+PersonalBaseConfig.ForestOuterHalfWidth = 235
+PersonalBaseConfig.ForestOuterHalfDepth = 200
+PersonalBaseConfig.ForestTreeTarget = 280
+PersonalBaseConfig.WorldSeed = 260809
+PersonalBaseConfig.ConstructionLabelDistance = 25
+PersonalBaseConfig.ConstructionPreviewDistance = 25
+
 -- A base's own buildable footprint, centered on its plot origin. Comfortably
 -- inside CellSize so no plot can ever reach a neighboring one.
 PersonalBaseConfig.PlotBounds = {
-	HalfWidth = 90,
+	HalfWidth = 120,
 	HalfDepth = 90,
 }
 
@@ -36,39 +52,27 @@ PersonalBaseConfig.GridSize = 4
 -- raw origin.
 PersonalBaseConfig.CoreLocalPosition = Vector3.new(0, 0, 45)
 PersonalBaseConfig.CoreProtectedRadius = 16
-PersonalBaseConfig.EntranceLocalPosition = Vector3.new(0, 0, -80)
+PersonalBaseConfig.EntranceLocalPosition = Vector3.new(0, 0, -88)
 PersonalBaseConfig.EntranceProtectedRadius = 12
 
--- Generic footprint clearance between any two placed structures. Superseded
--- by the footprint-AABB (well, footprint-circle — see BuildingService's
--- comment on why a conservative circle approximation was chosen over a
--- true oriented-rectangle test) overlap check in BuildingService.luau as of
--- Phase 4A.1; kept only as the fallback radius when a footprint size can't
--- be resolved for some reason.
+-- Legacy generic clearance retained for compatibility. Placement now uses
+-- each structure's true oriented rectangular footprint in BuildingService.
 PersonalBaseConfig.MinStructureSpacing = 6
 
 -- Phase 4A.1: the one region freeform placement (BasePlacementController)
 -- accepts structures in — core progression now goes through fixed
 -- blueprint pads instead (see BlueprintLayoutConfig.luau). Deliberately
--- clear of the Core (CoreLocalPosition, Z=45), the entrance
--- (EntranceLocalPosition, Z=-80), every pad in BlueprintLayoutConfig, and
--- the radius-85 perimeter wall ring.
+-- spans most of the rectangular settlement field; the Core, entrance,
+-- authored blueprint nodes and protected-zone checks keep key routes clear.
 PersonalBaseConfig.FreeformZone = {
-	MinX = 15,
-	MaxX = 55,
-	MinZ = -15,
-	MaxZ = 15,
+	-- Most of the inner settlement rectangle is expandable. Existing
+	-- protected-zone and authored-pad footprint checks keep the Core, gate and
+	-- tycoon purchase nodes clear without reducing expansion to one small yard.
+	MinX = -110,
+	MaxX = 110,
+	MinZ = -80,
+	MaxZ = 80,
 }
-
--- UI/HUD Visual Direction Pass: reserved for a FUTURE mailbox delivery
--- system (marketplace/trade item receipt) — location only, no pad, no
--- BuildingConfig entry, no RequestBuildBlueprint wiring this pass.
--- PersonalBaseGenerator draws a purely decorative "Coming Soon" prop here;
--- nothing reads or writes this position yet. Verified clear of every
--- existing pad/zone: Storage_1 (-25,0,18), DefenseControl_1 (-25,0,-10),
--- ResourceProcessor_1 (-40,0,-35), the Freeform Zone above, Core (Z=45),
--- and the entrance (Z=-80).
-PersonalBaseConfig.MailboxReservedLocalPosition = Vector3.new(-35, 0, 5)
 
 function PersonalBaseConfig.OriginForSlot(slot: number): CFrame
 	local gridX = slot % PersonalBaseConfig.GridWidth

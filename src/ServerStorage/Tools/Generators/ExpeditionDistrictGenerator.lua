@@ -16,13 +16,16 @@ local ARC_WALL_SEGMENTS = 14
 local DISTRICT_WIDTH = 260
 local DISTRICT_SIDE_X = DISTRICT_WIDTH / 2 - 1
 local THEMED_APPROACH_LENGTH = 36
+local GATHERING_DIAMETER = 24
+local GATHERING_RADIUS = GATHERING_DIAMETER / 2
+local CONNECTOR_START_RADIUS = 20
 
 -- The slab's front still meets Haven's own perimeter; its rear is derived from
 -- the arc so translating the fan toward Haven can never leave the curved
 -- defense wall hanging off the back of the foundation, nor drag a hundred
 -- studs of empty slab along behind it. Front and rear are the only Z values
 -- this generator fixes itself — everything else reads the arc.
-local DISTRICT_FRONT_Z = -37
+local DISTRICT_FRONT_Z = HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION.Z + 5
 local DISTRICT_REAR_Z = HavenLayoutConfig.EXPEDITION_ARC_CENTER_LOCAL_POSITION.Z - BACK_WALL_RADIUS - 10
 local DISTRICT_DEPTH = DISTRICT_FRONT_Z - DISTRICT_REAR_Z
 local DISTRICT_CENTER_Z = (DISTRICT_FRONT_Z + DISTRICT_REAR_Z) / 2
@@ -49,8 +52,8 @@ end
 local function pathBetween(parent: Instance, origin: CFrame, name: string, a: Vector3, b: Vector3, width: number)
 	local worldA = origin:PointToWorldSpace(a)
 	local worldB = origin:PointToWorldSpace(b)
-	local midpoint = (worldA + worldB) / 2 + Vector3.new(0, 0.55, 0)
-	part(parent, name, Vector3.new(width, 1, (worldB - worldA).Magnitude), CFrame.lookAt(midpoint, Vector3.new(worldB.X, midpoint.Y, worldB.Z)), Enum.Material.Pavement, Color3.fromRGB(96, 95, 90))
+	local midpoint = (worldA + worldB) / 2 + Vector3.new(0, 0.79, 0)
+	part(parent, name, Vector3.new(width, 0.58, (worldB - worldA).Magnitude), CFrame.lookAt(midpoint, Vector3.new(worldB.X, midpoint.Y, worldB.Z)), Enum.Material.Pavement, Color3.fromRGB(96, 95, 90))
 end
 
 local function worldSegment(parent: Instance, name: string, a: Vector3, b: Vector3, width: number, height: number, y: number, material: Enum.Material, color: Color3)
@@ -249,12 +252,14 @@ local function buildPortalPocket(parent: Instance, origin: CFrame, biomeId: stri
 end
 
 local function buildDistrictSideEnclosure(parent: Instance, origin: CFrame)
+	local gatewayZ = HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION.Z
+	local havenHalfWidth = HavenLayoutConfig.FORTIFICATION_HALF_WIDTH
 	for _, side in { -1, 1 } do
 		local points = {
-			origin:PointToWorldSpace(Vector3.new(side * 80, 0, -42)),
-			origin:PointToWorldSpace(Vector3.new(side * 91, 0, -47)),
-			origin:PointToWorldSpace(Vector3.new(side * 111, 0, -57)),
-			origin:PointToWorldSpace(Vector3.new(side * DISTRICT_SIDE_X, 0, -68)),
+			origin:PointToWorldSpace(Vector3.new(side * havenHalfWidth, 0, gatewayZ)),
+			origin:PointToWorldSpace(Vector3.new(side * (havenHalfWidth + 11), 0, gatewayZ - 5)),
+			origin:PointToWorldSpace(Vector3.new(side * (havenHalfWidth + 31), 0, gatewayZ - 15)),
+			origin:PointToWorldSpace(Vector3.new(side * DISTRICT_SIDE_X, 0, gatewayZ - 26)),
 		}
 		for index = 1, #points - 1 do
 			local wallA = points[index]
@@ -270,13 +275,13 @@ local function buildDistrictSideEnclosure(parent: Instance, origin: CFrame)
 		-- Start stays welded to the flare that meets Haven's wall; the end
 		-- follows the slab so the side security wall always encloses exactly
 		-- as much district as there is district.
-		local sideWallStart = -68
+		local sideWallStart = gatewayZ - 26
 		local sideWallEnd = DISTRICT_REAR_Z + 5
 		local sideWallCenter = (sideWallStart + sideWallEnd) / 2
 		local sideWallLength = math.abs(sideWallEnd - sideWallStart)
 		part(parent, "DistrictSideSecurity", Vector3.new(3.5, DISTRICT_WALL_HEIGHT, sideWallLength), origin * CFrame.new(side * DISTRICT_SIDE_X, DISTRICT_WALL_HEIGHT / 2, sideWallCenter), Enum.Material.Metal, Color3.fromRGB(39, 43, 49))
 		part(parent, "DistrictSideCap", Vector3.new(5, 1.2, sideWallLength), origin * CFrame.new(side * DISTRICT_SIDE_X, DISTRICT_WALL_HEIGHT + 0.6, sideWallCenter), Enum.Material.Metal, Color3.fromRGB(31, 36, 42))
-		for z = -86, sideWallEnd, -36 do
+		for z = sideWallStart - 18, sideWallEnd, -36 do
 			part(parent, "DistrictSideButtress", Vector3.new(7, DISTRICT_WALL_HEIGHT + 5, 7), origin * CFrame.new(side * DISTRICT_SIDE_X, (DISTRICT_WALL_HEIGHT + 5) / 2, z), Enum.Material.Concrete, Color3.fromRGB(48, 52, 58))
 		end
 	end
@@ -325,19 +330,26 @@ function ExpeditionDistrictGenerator.Build(parent: Instance, origin: CFrame): Mo
 	-- Runs from Haven's gateway to the plaza center, so it shortens exactly as
 	-- much as the district moves forward instead of leaving dead pavement.
 	local causewayFromZ = HavenLayoutConfig.EXPEDITION_GATEWAY_LOCAL_POSITION.Z
-	part(
-		model,
-		"GatewayCauseway",
-		Vector3.new(32, 1, math.abs(gathering.Z - causewayFromZ)),
-		origin * CFrame.new(0, 0.55, (causewayFromZ + gathering.Z) / 2),
-		Enum.Material.Pavement,
-		Color3.fromRGB(99, 98, 92)
-	)
-	local gatheringDisc = part(model, "CentralExpeditionGathering", Vector3.new(1, 56, 56), origin * CFrame.new(gathering) * CFrame.Angles(0, 0, math.rad(90)), Enum.Material.DiamondPlate, Color3.fromRGB(76, 80, 83))
+	local gatheringFrontZ = gathering.Z + GATHERING_RADIUS
+	local gatewayToGathering = math.abs(gathering.Z - causewayFromZ)
+	local causewayLength = gatewayToGathering - GATHERING_RADIUS
+	if causewayLength > 1 then
+		part(
+			model,
+			"GatewayCauseway",
+			Vector3.new(24, 0.58, causewayLength),
+			origin * CFrame.new(0, 0.79, (causewayFromZ + gatheringFrontZ) / 2),
+			Enum.Material.Pavement,
+			Color3.fromRGB(99, 98, 92)
+		)
+	end
+	local gatheringDisc = part(model, "CentralExpeditionGathering", Vector3.new(0.16, GATHERING_DIAMETER, GATHERING_DIAMETER), origin * CFrame.new(gathering + Vector3.new(0, 0.92, 0)) * CFrame.Angles(0, 0, math.rad(90)), Enum.Material.DiamondPlate, Color3.fromRGB(76, 80, 83))
 	gatheringDisc.Shape = Enum.PartType.Cylinder
 	for _, biomeId in PORTAL_ORDER do
 		local placement = HavenLayoutConfig.PortalPlacement(biomeId)
-		pathBetween(model, origin, `{biomeId}Connector`, gathering, placement.approachLocalPosition, 14)
+		local connectorDirection = (placement.approachLocalPosition - gathering).Unit
+		local connectorStart = gathering + connectorDirection * CONNECTOR_START_RADIUS
+		pathBetween(model, origin, `{biomeId}Connector`, connectorStart, placement.approachLocalPosition, 14)
 		buildThemedApproach(model, origin, biomeId)
 		buildPortalPocket(model, origin, biomeId)
 	end

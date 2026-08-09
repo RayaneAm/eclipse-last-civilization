@@ -34,6 +34,7 @@ local Button = require(script.Parent.Parent.UI.Components.Button)
 local CloseButton = require(script.Parent.Parent.UI.Components.CloseButton)
 local TabStrip = require(script.Parent.Parent.UI.Components.TabStrip)
 local ConfirmDialog = require(script.Parent.Parent.UI.Components.ConfirmDialog)
+local BaseActionDialog = require(script.Parent.Parent.UI.Components.BaseActionDialog)
 local ItemIcon = require(script.Parent.Parent.UI.Components.ItemIcon)
 local EmptyState = require(script.Parent.Parent.UI.Components.EmptyState)
 
@@ -45,7 +46,8 @@ local BaseUIController = {}
 local isOpen = false
 local previousSelection: GuiObject? = nil
 local currentSession: any = nil
-local pendingPadBuild = false
+local currentPlayerSession: any = nil
+local pendingBaseAction = false
 
 -- Maps every EXPECTED RequestBuildBlueprint rejection reason to a player-
 -- facing message — mirrors BasePlacementController's own REJECTION_MESSAGES
@@ -59,7 +61,43 @@ local BLUEPRINT_REJECTION_MESSAGES: { [string]: string } = {
 	BaseNotReady = "Base is not ready yet",
 	ProtectedZone = "This pad is blocked",
 	Overlap = "This pad is blocked",
+	MissingPrerequisite = "Build the required settlement structure first",
 }
+
+local UPGRADE_REJECTION_MESSAGES: { [string]: string } = {
+	CannotAfford = "Not enough materials for this upgrade",
+	NoUpgradeAvailable = "This defense is already at its highest tier",
+	InvalidUpgradePath = "This upgrade is not valid for this perimeter socket",
+	UnknownStructure = "This structure no longer exists",
+	BaseNotReady = "Base is not ready yet",
+}
+
+local DISTRICT_ACCENTS = {
+	Entrance = Color3.fromRGB(196, 158, 91),
+	Logistics = Color3.fromRGB(91, 181, 184),
+	Production = Color3.fromRGB(203, 137, 67),
+	Support = Color3.fromRGB(114, 169, 103),
+	Perimeter = Color3.fromRGB(179, 94, 76),
+}
+
+local function scrapBalance(): number
+	if currentPlayerSession and currentPlayerSession.Currencies then
+		return currentPlayerSession.Currencies.Scrap or 0
+	end
+	return 0
+end
+
+local function ownerUserId(instance: Instance): number?
+	local cursor: Instance? = instance
+	while cursor do
+		local value = cursor:GetAttribute("OwnerUserId")
+		if typeof(value) == "number" then
+			return value
+		end
+		cursor = cursor.Parent
+	end
+	return nil
+end
 
 local function clearScroll(scroll: ScrollingFrame)
 	for _, child in scroll:GetChildren() do
@@ -160,43 +198,183 @@ local function renderOverview(scroll: ScrollingFrame, session: any)
 
 	local capacity = PersonalBaseConfig.BuildingCapacityForLevel(session.Level)
 	local structureCount = 0
-	for _ in session.Structures do
-		structureCount += 1
-	end
 	local storageUsed = 0
 	for _, amount in session.Storage do
 		storageUsed += amount
 	end
-
-	local totalPads = #BlueprintLayoutConfig.All
 	local builtPads = 0
+	local builtIds: { [string]: boolean } = {}
+	local structureByPad: { [string]: any } = {}
 	for _, structure in session.Structures do
+		structureCount += 1
+		builtIds[structure.BuildingId] = true
 		if structure.PadId then
 			builtPads += 1
+			structureByPad[structure.PadId] = structure
 		end
 	end
-
-	local lines = {
-		`Base Level: {session.Level}`,
-		`Investment Score: {session.InvestmentScore}`,
-		`Structures: {structureCount} / {capacity}`,
-		`Blueprint Pads: {builtPads} / {totalPads} built`,
-		`Storage: {storageUsed} / {session.StorageCapacity}`,
-		`Generator Fuel: {session.Power.GeneratorFuel}`,
-		"Eclipse Readiness: Foundation only — no assault system active yet.",
-	}
-
-	for i, text in lines do
+	local order = 1
+	local function heading(text: string, color: Color3)
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.Size = UDim2.new(1, 0, 0, 26)
-		label.LayoutOrder = i
+		label.Size = UDim2.new(1, 0, 0, 24)
+		label.LayoutOrder = order
+		label.Font = Theme.Font.Heading.Font
+		label.TextSize = Theme.Font.Heading.Size
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextColor3 = color
+		label.Text = string.upper(text)
+		label.Parent = scroll
+		order += 1
+	end
+	local function card(text: string, height: number)
+		local surface = Surface.new({ Size = UDim2.new(1, 0, 0, height), LayoutOrder = order, Parent = scroll })
+		order += 1
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromOffset(12, 7)
+		label.Size = UDim2.new(1, -24, 1, -14)
 		label.Font = Theme.Font.Body.Font
 		label.TextSize = Theme.Font.Body.Size
-		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.TextColor3 = Theme.Colors.TextSecondary
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		label.TextWrapped = true
 		label.Text = text
+		label.Parent = surface
+	end
+
+	heading("Settlement Summary", Theme.Colors.BrandLight)
+	card(`LEVEL {session.Level}  •  {session.InvestmentScore} INVESTMENT\nSTRUCTURES {structureCount}/{capacity}  •  NODES {builtPads}/{#BlueprintLayoutConfig.All}\nSTORAGE {storageUsed}/{session.StorageCapacity}`, 72)
+
+	local powerCapacity = 0
+	local powerUsed = 0
+	for structureId, structure in session.Structures do
+		if structure.BuildingId == "Generator" then
+			powerCapacity = 10 + (structure.Level - 1) * 4
+		end
+		if session.Power.Enabled[structureId] then
+			local definition = BuildingConfig.Get(structure.BuildingId)
+			powerUsed += if definition then definition.PowerDraw else 0
+		end
+	end
+	local runningJobs, readyJobs = 0, 0
+	for _, job in session.ProductionJobs do
+		if not job.Collected then
+			if os.time() < job.CompletesAt then
+				runningJobs += 1
+				local recipe = ProductionRecipeConfig.Get(job.RecipeId)
+				powerUsed += if recipe then recipe.PowerDraw else 0
+			else
+				readyJobs += 1
+			end
+		end
+	end
+	heading("Operations", Theme.Colors.Teal)
+	card(`POWER {powerUsed}/{powerCapacity}  •  FUEL {session.Power.GeneratorFuel}\nPRODUCTION {runningJobs} RUNNING  •  {readyJobs} READY`, 52)
+
+	heading("Perimeter Defense", Color3.fromRGB(194, 112, 91))
+	for _, groupName in { "Front", "Left", "Right", "Back", "Gate" } do
+		local socketCount, builtCount, minimumTier = 0, 0, 4
+		for _, pad in BlueprintLayoutConfig.All do
+			if pad.DefenseGroup == groupName then
+				socketCount += 1
+				local structure = structureByPad[pad.PadId]
+				if structure then
+					builtCount += 1
+					local definition = BuildingConfig.Get(structure.BuildingId)
+					minimumTier = math.min(minimumTier, if definition and definition.DefenseTier then definition.DefenseTier else 1)
+				else
+					minimumTier = 0
+				end
+			end
+		end
+		local row = Surface.new({ Size = UDim2.new(1, 0, 0, 38), LayoutOrder = order, Parent = scroll })
+		order += 1
+		local rowLabel = Instance.new("TextLabel")
+		rowLabel.BackgroundTransparency = 1
+		rowLabel.Position = UDim2.fromOffset(12, 0)
+		rowLabel.Size = UDim2.new(0.42, 0, 1, 0)
+		rowLabel.Font = Theme.Font.Body.Font
+		rowLabel.TextSize = Theme.Font.Body.Size
+		rowLabel.TextColor3 = Theme.Colors.TextSecondary
+		rowLabel.TextXAlignment = Enum.TextXAlignment.Left
+		rowLabel.Text = `{string.upper(groupName)}  {builtCount}/{socketCount}`
+		rowLabel.Parent = row
+		local segments = Instance.new("Frame")
+		segments.BackgroundTransparency = 1
+		segments.Position = UDim2.new(0.45, 0, 0.5, -5)
+		segments.Size = UDim2.new(0.38, 0, 0, 10)
+		segments.Parent = row
+		local segmentLayout = Instance.new("UIListLayout")
+		segmentLayout.FillDirection = Enum.FillDirection.Horizontal
+		segmentLayout.Padding = UDim.new(0, 4)
+		segmentLayout.Parent = segments
+		for tier = 1, 4 do
+			local segment = Instance.new("Frame")
+			segment.Size = UDim2.new(0.25, -3, 1, 0)
+			segment.BackgroundColor3 = if tier <= minimumTier then Color3.fromRGB(194, 112, 91) else Color3.fromRGB(61, 58, 65)
+			segment.BorderSizePixel = 0
+			segment.Parent = segments
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = Theme.Corner.Pill
+			corner.Parent = segment
+		end
+		local tierLabel = Instance.new("TextLabel")
+		tierLabel.BackgroundTransparency = 1
+		tierLabel.Position = UDim2.new(0.84, 0, 0, 0)
+		tierLabel.Size = UDim2.new(0.16, -12, 1, 0)
+		tierLabel.Font = Theme.Font.Heading.Font
+		tierLabel.TextSize = Theme.Font.Body.Size
+		tierLabel.TextColor3 = if minimumTier > 0 then Theme.Colors.TextPrimary else Theme.Colors.Danger
+		tierLabel.TextXAlignment = Enum.TextXAlignment.Right
+		tierLabel.Text = if minimumTier > 0 then `T{minimumTier}` else "OPEN"
+		tierLabel.Parent = row
+	end
+
+	local suggestions = {}
+	for _, buildingId in { "Storage", "Generator", "ResourceProcessor", "SurvivorQuarters", "DefenseControl" } do
+		if not builtIds[buildingId] and #suggestions < 4 then
+			local definition = BuildingConfig.Get(buildingId)
+			table.insert(suggestions, `Build {if definition then definition.Name else buildingId}`)
+		end
+	end
+	if #suggestions < 4 then
+		for _, pad in BlueprintLayoutConfig.All do
+			if pad.DefenseGroup and not structureByPad[pad.PadId] then
+				table.insert(suggestions, `Close the {string.lower(pad.DefenseGroup)} perimeter`)
+				break
+			end
+		end
+	end
+	if #suggestions < 4 then
+		for _, structure in session.Structures do
+			local definition = BuildingConfig.Get(structure.BuildingId)
+			if definition and definition.DefenseTier and definition.NextTierBuildingId then
+				table.insert(suggestions, `Upgrade {definition.Name} to tier {definition.DefenseTier + 1}`)
+				break
+			end
+		end
+	end
+	if #suggestions == 0 then
+		table.insert(suggestions, "Deposit expedition materials and keep production moving")
+	end
+	heading("Suggested Next Actions", Theme.Colors.Success)
+	for suggestionIndex, suggestion in suggestions do
+		if suggestionIndex > 4 then
+			break
+		end
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Size = UDim2.new(1, 0, 0, 24)
+		label.LayoutOrder = order
+		label.Font = Theme.Font.Body.Font
+		label.TextSize = Theme.Font.Body.Size
+		label.TextColor3 = Theme.Colors.TextSecondary
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Text = `•  {suggestion}`
 		label.Parent = scroll
+		order += 1
 	end
 
 	-- Phase 4A.1: guided blueprint pads are now the PRIMARY build path —
@@ -208,7 +386,7 @@ local function renderOverview(scroll: ScrollingFrame, session: any)
 	local buildRow = Instance.new("Frame")
 	buildRow.AutomaticSize = Enum.AutomaticSize.Y
 	buildRow.Size = UDim2.new(1, 0, 0, 0)
-	buildRow.LayoutOrder = #lines + 1
+	buildRow.LayoutOrder = order
 	buildRow.BackgroundTransparency = 1
 	buildRow.Parent = scroll
 
@@ -224,7 +402,7 @@ local function renderOverview(scroll: ScrollingFrame, session: any)
 		LayoutOrder = 1,
 		OnActivated = function()
 			BaseUIController.Close()
-			NotificationController.Toast("ObjectiveAdvanced", "Walk to a glowing blueprint pad in your base to build it")
+			NotificationController.Toast("ObjectiveAdvanced", "Walk to a nearby construction beacon in your base to build")
 		end,
 		Parent = buildRow,
 	})
@@ -252,24 +430,97 @@ local function renderStorage(scroll: ScrollingFrame, session: any)
 		return
 	end
 	local order = 1
-	for itemId, amount in session.Storage do
-		local reserved = session.Reserved[itemId] or 0
-		buildQuantityRow(scroll, order, `{amount} (Reserved {reserved})`, "Withdraw", math.min(10, amount), function(quantity)
-			local ok, reason = Net.GetFunction("RequestWithdrawStorage"):InvokeServer({ ItemId = itemId, Amount = quantity })
-			if not ok then
-				warn(`BaseUIController: withdraw failed: {tostring(reason)}`)
+	local depositHeader = Instance.new("TextLabel")
+	depositHeader.BackgroundTransparency = 1
+	depositHeader.Size = UDim2.new(1, 0, 0, 26)
+	depositHeader.LayoutOrder = order
+	depositHeader.Font = Theme.Font.Heading.Font
+	depositHeader.TextSize = Theme.Font.Heading.Size
+	depositHeader.TextXAlignment = Enum.TextXAlignment.Left
+	depositHeader.TextColor3 = Theme.Colors.TextPrimary
+	depositHeader.Text = "DEPOSIT FROM BACKPACK"
+	depositHeader.Parent = scroll
+	order += 1
+	local carriedCount = 0
+	if currentPlayerSession then
+		for itemId, amount in currentPlayerSession.Inventory do
+			if amount > 0 then
+				carriedCount += 1
+				buildQuantityRow(scroll, order, tostring(amount), "Deposit", math.min(10, amount), function(quantity)
+					local ok, reason = Net.GetFunction("RequestDepositStorage"):InvokeServer({ ItemId = itemId, Amount = quantity })
+					if not ok then
+						warn(`BaseUIController: deposit failed: {tostring(reason)}`)
+					end
+				end, itemId)
+				order += 1
 			end
-		end, itemId)
+		end
+	end
+	if carriedCount == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.BackgroundTransparency = 1
+		empty.Size = UDim2.new(1, 0, 0, 28)
+		empty.LayoutOrder = order
+		empty.Font = Theme.Font.Body.Font
+		empty.TextSize = Theme.Font.Body.Size
+		empty.TextXAlignment = Enum.TextXAlignment.Left
+		empty.TextColor3 = Theme.Colors.TextSecondary
+		empty.Text = "Your backpack has no materials to deposit."
+		empty.Parent = scroll
 		order += 1
 	end
-	if order == 1 then
-		EmptyState.new({ Icon = "📦", Text = "Storage is empty", Parent = scroll })
+	local storageHeader = depositHeader:Clone()
+	storageHeader.LayoutOrder = order
+	storageHeader.Text = "BASE STORAGE"
+	storageHeader.Parent = scroll
+	order += 1
+	local storedCount = 0
+	for itemId, amount in session.Storage do
+		if amount > 0 then
+			storedCount += 1
+			local reserved = session.Reserved[itemId] or 0
+			buildQuantityRow(scroll, order, `{amount} (Reserved {reserved})`, "Withdraw", math.min(10, amount), function(quantity)
+				local ok, reason = Net.GetFunction("RequestWithdrawStorage"):InvokeServer({ ItemId = itemId, Amount = quantity })
+				if not ok then
+					warn(`BaseUIController: withdraw failed: {tostring(reason)}`)
+				end
+			end, itemId)
+			order += 1
+		end
+	end
+	if storedCount == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.BackgroundTransparency = 1
+		empty.Size = UDim2.new(1, 0, 0, 28)
+		empty.LayoutOrder = order
+		empty.Font = Theme.Font.Body.Font
+		empty.TextSize = Theme.Font.Body.Size
+		empty.TextXAlignment = Enum.TextXAlignment.Left
+		empty.TextColor3 = Theme.Colors.TextSecondary
+		empty.Text = "Base Storage is empty. Deposit expedition materials above."
+		empty.Parent = scroll
 	end
 end
 
 -- ---------------------------------------------------------------------
 -- Production
 -- ---------------------------------------------------------------------
+
+local function recipeSummary(recipe: ProductionRecipeConfig.ProductionRecipe): string
+	local itemIds = {}
+	for itemId in recipe.Materials do
+		table.insert(itemIds, itemId)
+	end
+	table.sort(itemIds)
+	local inputs = {}
+	for _, itemId in itemIds do
+		table.insert(inputs, `{recipe.Materials[itemId]} {itemId}`)
+	end
+	if recipe.Scrap > 0 then
+		table.insert(inputs, `{recipe.Scrap} Scrap`)
+	end
+	return `{table.concat(inputs, " + ")}  →  {recipe.OutputQuantity} {recipe.OutputItemId}  •  {recipe.DurationSeconds}s`
+end
 
 local function renderProduction(scroll: ScrollingFrame, session: any)
 	clearScroll(scroll)
@@ -319,7 +570,7 @@ local function renderProduction(scroll: ScrollingFrame, session: any)
 				order += 1
 			else
 				for _, recipe in ProductionRecipeConfig.ForMachine(structure.BuildingId) do
-					local row = Surface.new({ Size = UDim2.new(1, 0, 0, 40), LayoutOrder = order, Parent = scroll })
+					local row = Surface.new({ Size = UDim2.new(1, 0, 0, 54), LayoutOrder = order, Parent = scroll })
 					local label = Instance.new("TextLabel")
 					label.BackgroundTransparency = 1
 					label.Size = UDim2.fromScale(0.6, 1)
@@ -327,7 +578,8 @@ local function renderProduction(scroll: ScrollingFrame, session: any)
 					label.TextSize = Theme.Font.Body.Size
 					label.TextXAlignment = Enum.TextXAlignment.Left
 					label.TextColor3 = Theme.Colors.TextSecondary
-					label.Text = `{recipe.Name} (◆{recipe.Scrap}, {recipe.DurationSeconds}s)`
+					label.TextWrapped = true
+					label.Text = `{recipe.Name}\n{recipeSummary(recipe)}`
 					label.Parent = row
 					Button.new({
 						Text = "Start",
@@ -337,7 +589,13 @@ local function renderProduction(scroll: ScrollingFrame, session: any)
 						OnActivated = function()
 							local ok, reason = Net.GetFunction("RequestStartProduction"):InvokeServer({ MachineStructureId = structureId, RecipeId = recipe.Id })
 							if not ok then
-								warn(`BaseUIController: start production failed: {tostring(reason)}`)
+								local messages = {
+									InsufficientMaterials = "Deposit more input materials into Base Storage",
+									InsufficientPower = "Build or upgrade power capacity",
+									InsufficientScrap = "Not enough Scrap",
+									MachineBusy = "This machine is already running",
+								}
+								NotificationController.Toast("BuildRejected", messages[tostring(reason)] or `Production failed: {tostring(reason)}`)
 							end
 						end,
 						Parent = row,
@@ -517,7 +775,7 @@ function BaseUIController:_buildPanel()
 		Parent = backdrop,
 	})
 	local sizeConstraint = Instance.new("UISizeConstraint")
-	sizeConstraint.MinSize = Vector2.new(380, 460)
+	sizeConstraint.MinSize = Vector2.new(300, 420)
 	sizeConstraint.MaxSize = Vector2.new(600, 640)
 	sizeConstraint.Parent = panel
 	self._panel = panel
@@ -573,22 +831,35 @@ function BaseUIController:_buildPanel()
 
 	local currentTab = "Overview"
 	local tabDefs = { { Id = "Overview", Label = "Overview" }, { Id = "Storage", Label = "Storage" }, { Id = "Production", Label = "Production" }, { Id = "Power", Label = "Power" }, { Id = "Trader", Label = "Trader" }, { Id = "DefenseReserve", Label = "Defense" } }
+	self._currentTab = currentTab
+	local tabsScroller = Instance.new("ScrollingFrame")
+	tabsScroller.Name = "TabsScroller"
+	tabsScroller.Position = UDim2.new(0, 0, 0, 36)
+	tabsScroller.Size = UDim2.new(1, 0, 0, 36)
+	tabsScroller.BackgroundTransparency = 1
+	tabsScroller.BorderSizePixel = 0
+	tabsScroller.AutomaticCanvasSize = Enum.AutomaticSize.X
+	tabsScroller.CanvasSize = UDim2.new()
+	tabsScroller.ScrollBarThickness = 0
+	tabsScroller.ScrollingDirection = Enum.ScrollingDirection.X
+	tabsScroller.Parent = panel
 
-	local _tabStrip, selectTab, tabButtons = TabStrip.new({
+	local tabStrip, selectTab, tabButtons = TabStrip.new({
 		Name = "Tabs",
-		Position = UDim2.new(0, 0, 0, 36),
-		Size = UDim2.new(1, 0, 0, 36),
+		Size = UDim2.new(0, 0, 1, 0),
 		Tabs = tabDefs,
 		InitialTabId = currentTab,
 		OnTabSelected = function(tabId: string)
 			currentTab = tabId
+			self._currentTab = tabId
 			local renderer = TAB_RENDERERS[tabId]
 			if renderer then
 				renderer(scroll, currentSession)
 			end
 		end,
-		Parent = panel,
+		Parent = tabsScroller,
 	})
+	tabStrip.AutomaticSize = Enum.AutomaticSize.X
 	self._selectTab = selectTab
 
 	GamepadNav.LinkChain({ closeButton, table.unpack(tabButtons) })
@@ -600,6 +871,10 @@ function BaseUIController:_refresh()
 		return Net.GetFunction("RequestBaseState"):InvokeServer(player.UserId)
 	end)
 	currentSession = if ok and result then result.Session else nil
+	local playerOk, playerResult = pcall(function()
+		return Net.GetFunction("RequestPlayerSession"):InvokeServer()
+	end)
+	currentPlayerSession = if playerOk then playerResult else currentPlayerSession
 end
 
 function BaseUIController:Init()
@@ -650,6 +925,10 @@ local function setupTerminal(instance: Instance, trove: any, initialTab: string)
 	if not instance:IsA("BasePart") then
 		return
 	end
+	local ownerId = ownerUserId(instance)
+	if ownerId and ownerId ~= Players.LocalPlayer.UserId then
+		return
+	end
 	local prompt = instance:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
 		return
@@ -659,22 +938,32 @@ local function setupTerminal(instance: Instance, trove: any, initialTab: string)
 	end))
 end
 
--- Builds a plain-text cost breakdown ("◆ 40 Scrap", "Stone x20") for the
--- ConfirmDialog cost preview — ConfirmDialog is text-only (Title/Message),
--- so this stays consistent with every other confirmation in the project
--- rather than extending that shared component just for this one caller.
-local function costPreviewText(cost: BuildingConfig.BuildingCost): string
-	local parts = {}
-	if cost.Scrap > 0 then
-		table.insert(parts, `◆ {cost.Scrap} Scrap`)
+local function setupProductionMachine(instance: Instance, trove: any)
+	if not instance:IsA("BasePart") or ownerUserId(instance) ~= Players.LocalPlayer.UserId then
+		return
 	end
-	for itemId, amount in cost.Materials do
-		table.insert(parts, `{itemId} x{amount}`)
+	local prompt = instance:FindFirstChildOfClass("ProximityPrompt")
+	if not prompt then
+		return
 	end
-	if #parts == 0 then
-		return "No cost."
-	end
-	return table.concat(parts, "\n")
+	trove:Add(prompt.Triggered:Connect(function()
+		BaseUIController:_refresh()
+		local structureId = instance:GetAttribute("StructureId")
+		if instance:GetAttribute("ProductionState") == "Ready" and typeof(structureId) == "string" and currentSession then
+			for _, job in currentSession.ProductionJobs do
+				if job.MachineStructureId == structureId and not job.Collected and os.time() >= job.CompletesAt then
+					local ok, reason = Net.GetFunction("RequestCollectProduction"):InvokeServer({ JobId = job.Id })
+					if ok then
+						NotificationController.Toast("BuildConfirmed", "Production collected into Base Storage")
+					else
+						NotificationController.Toast("BuildRejected", if reason == "StorageFull" then "Base Storage is full" else `Collect failed: {tostring(reason)}`)
+					end
+					return
+				end
+			end
+		end
+		BaseUIController.Open("Production")
+	end))
 end
 
 -- Phase 4A.1: the primary guided-progression build path — walking up to a
@@ -685,8 +974,13 @@ end
 -- e.g. PersonalBaseGenerator.RestoreBlueprintPad after a dismantle — are
 -- picked up automatically via the InstanceAdded signal below, not just at
 -- Start() time.
+local setupUpgradeableStructure: (Instance, any) -> ()
+
 local function setupBlueprintPad(instance: Instance, trove: any)
 	if not instance:IsA("BasePart") then
+		return
+	end
+	if ownerUserId(instance) ~= Players.LocalPlayer.UserId then
 		return
 	end
 	local prompt = instance:FindFirstChildOfClass("ProximityPrompt")
@@ -694,6 +988,7 @@ local function setupBlueprintPad(instance: Instance, trove: any)
 		return
 	end
 	trove:Add(prompt.Triggered:Connect(function()
+		BaseUIController:_refresh()
 		local padId = instance:GetAttribute("PadId")
 		if typeof(padId) ~= "string" then
 			return
@@ -707,17 +1002,23 @@ local function setupBlueprintPad(instance: Instance, trove: any)
 			return
 		end
 
-		ConfirmDialog.Show({
+		BaseActionDialog.Show({
 			Title = `Build {definition.Name}`,
-			Message = `Cost:\n{costPreviewText(definition.Cost)}`,
+			Eyebrow = `{string.upper(pad.District)} BUILD NODE`,
+			Description = definition.Description or "Add this structure to your settlement.",
+			Detail = "Materials are taken from Base Storage.",
+			Cost = definition.Cost,
+			Storage = if currentSession then currentSession.Storage else {},
+			Scrap = scrapBalance(),
+			AccentColor = DISTRICT_ACCENTS[pad.District],
 			ConfirmText = "Build",
 			OnConfirm = function()
-				if pendingPadBuild then
+				if pendingBaseAction then
 					return
 				end
-				pendingPadBuild = true
+				pendingBaseAction = true
 				local ok, reason = Net.GetFunction("RequestBuildBlueprint"):InvokeServer({ PadId = padId })
-				pendingPadBuild = false
+				pendingBaseAction = false
 
 				if ok then
 					NotificationController.Toast("BuildConfirmed", `{definition.Name} built`)
@@ -745,6 +1046,20 @@ function BaseUIController:Start()
 		setupTerminal(instance, self._trove, "Trader")
 	end)
 
+	for _, instance in CollectionService:GetTagged("BaseStorageTerminal") do
+		setupTerminal(instance, self._trove, "Storage")
+	end
+	CollectionService:GetInstanceAddedSignal("BaseStorageTerminal"):Connect(function(instance)
+		setupTerminal(instance, self._trove, "Storage")
+	end)
+
+	for _, instance in CollectionService:GetTagged("BaseProductionMachine") do
+		setupProductionMachine(instance, self._trove)
+	end
+	CollectionService:GetInstanceAddedSignal("BaseProductionMachine"):Connect(function(instance)
+		setupProductionMachine(instance, self._trove)
+	end)
+
 	for _, instance in CollectionService:GetTagged("BaseBlueprintPad") do
 		setupBlueprintPad(instance, self._trove)
 	end
@@ -752,24 +1067,81 @@ function BaseUIController:Start()
 		setupBlueprintPad(instance, self._trove)
 	end)
 
+	for _, instance in CollectionService:GetTagged("BaseUpgradeableStructure") do
+		setupUpgradeableStructure(instance, self._trove)
+	end
+	self._trove:Add(CollectionService:GetInstanceAddedSignal("BaseUpgradeableStructure"):Connect(function(instance)
+		setupUpgradeableStructure(instance, self._trove)
+	end))
+
 	self._trove:Add(Net.GetEvent("BaseStateChanged").OnClientEvent:Connect(function(session: any)
 		currentSession = session
 		if isOpen then
-			-- Re-render whichever tab is active with fresh data.
-			local activeTabId = "Overview"
-			for _, child in self._panel:FindFirstChild("Tabs"):GetChildren() do
-				if child:IsA("TextButton") then
-					local underline = child:FindFirstChild("Underline")
-					if underline and (underline :: Frame).BackgroundTransparency == 0 then
-						activeTabId = child.Name
-					end
-				end
-			end
-			local renderer = TAB_RENDERERS[activeTabId]
+			local renderer = TAB_RENDERERS[self._currentTab or "Overview"]
 			if renderer then
 				renderer(self._scroll, currentSession)
 			end
 		end
+	end))
+
+	self._trove:Add(Net.GetEvent("InventoryChanged").OnClientEvent:Connect(function(inventory: { [string]: number })
+		if currentPlayerSession then
+			currentPlayerSession.Inventory = inventory
+		end
+		if isOpen and self._currentTab == "Storage" then
+			renderStorage(self._scroll, currentSession)
+		end
+	end))
+end
+
+setupUpgradeableStructure = function(instance: Instance, trove: any)
+	if not instance:IsA("BasePart") or ownerUserId(instance) ~= Players.LocalPlayer.UserId then
+		return
+	end
+	local prompt = instance:FindFirstChild("UpgradePrompt")
+	if not prompt or not prompt:IsA("ProximityPrompt") then
+		return
+	end
+	trove:Add(prompt.Triggered:Connect(function()
+		BaseUIController:_refresh()
+		local structureId = instance:GetAttribute("StructureId")
+		if typeof(structureId) ~= "string" or not currentSession then
+			return
+		end
+		local structure = currentSession.Structures[structureId]
+		local currentDefinition = structure and BuildingConfig.Get(structure.BuildingId)
+		local nextDefinition = currentDefinition and currentDefinition.NextTierBuildingId and BuildingConfig.Get(currentDefinition.NextTierBuildingId)
+		if not structure or not currentDefinition or not nextDefinition then
+			NotificationController.Toast("BuildRejected", "This defense is already at its highest tier")
+			return
+		end
+		local currentTier = currentDefinition.DefenseTier or structure.Level
+		local nextTier = nextDefinition.DefenseTier or (currentTier + 1)
+		BaseActionDialog.Show({
+			Title = `Upgrade to {nextDefinition.Name}`,
+			Eyebrow = `PERIMETER TIER {currentTier}  →  {nextTier}`,
+			Description = currentDefinition.UpgradeSummary or nextDefinition.Description or "Strengthen this structure.",
+			Detail = `{currentDefinition.TierLabel or "CURRENT"}  •  {structure.Health}/{BuildingConfig.GetMaxHealth(currentDefinition.Id)} health\n{nextDefinition.TierLabel or "NEXT"}  •  {BuildingConfig.GetMaxHealth(nextDefinition.Id)} max health`,
+			Cost = nextDefinition.Cost,
+			Storage = currentSession.Storage,
+			Scrap = scrapBalance(),
+			AccentColor = DISTRICT_ACCENTS.Perimeter,
+			ConfirmText = `Upgrade to T{nextTier}`,
+			OnConfirm = function()
+				if pendingBaseAction then
+					return
+				end
+				pendingBaseAction = true
+				local ok, reason = Net.GetFunction("RequestUpgradeBuilding"):InvokeServer({ StructureId = structureId })
+				pendingBaseAction = false
+				if ok then
+					NotificationController.Toast("BuildConfirmed", `{nextDefinition.Name} upgrade complete`)
+				else
+					local message = UPGRADE_REJECTION_MESSAGES[tostring(reason)]
+					NotificationController.Toast("BuildRejected", message or `Upgrade failed: {tostring(reason)}`)
+				end
+			end,
+		})
 	end))
 end
 

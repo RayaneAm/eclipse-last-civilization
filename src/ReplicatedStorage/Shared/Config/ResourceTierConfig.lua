@@ -21,6 +21,8 @@ local entries: { ResourceTierEntry } = {
 	{ id = "Stone", name = "Stone", tier = 1, category = "Forest" },
 	{ id = "Fiber", name = "Fiber", tier = 1, category = "Forest" },
 	{ id = "Resin", name = "Resin", tier = 1, category = "Forest" },
+	{ id = "ReinforcedPlanks", name = "Reinforced Planks", tier = 1, category = "ForestProcessed" },
+	{ id = "StoneBricks", name = "Stone Bricks", tier = 1, category = "ForestProcessed" },
 
 	-- Tier 2 — Frozen
 	{ id = "Iron", name = "Iron", tier = 2, category = "Frozen" },

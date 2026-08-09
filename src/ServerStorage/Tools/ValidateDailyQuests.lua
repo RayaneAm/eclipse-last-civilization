@@ -83,6 +83,7 @@ function ValidateDailyQuests.Run(): { string }
 	-- Pool shape
 	-- ------------------------------------------------------------------
 	check(#DailyQuestConfig.Pool >= DailyQuestConfig.QUESTS_PER_DAY, "pool holds at least a full day's worth of quests")
+	check(#DailyQuestConfig.SharedPoolIds >= DailyQuestConfig.QUESTS_PER_DAY, "shared pool holds at least three quests")
 
 	local seenIds: { [string]: boolean } = {}
 	for _, definition in DailyQuestConfig.Pool do
@@ -115,6 +116,23 @@ function ValidateDailyQuests.Run(): { string }
 		if definition.objectiveType == "HarvestNode" then
 			check(definition.requires.AnyAccessibleResource == true, `"{definition.id}" gates on reachable nodes existing`)
 		end
+	end
+
+	local sharedA = DailyQuestConfig.SharedDailyIds(20500)
+	local sharedB = DailyQuestConfig.SharedDailyIds(20500)
+	check(#sharedA == 3 and #sharedB == 3, "every UTC day resolves to exactly three shared quests")
+	local sharedSeen: { [string]: boolean } = {}
+	for index, id in sharedA do
+		check(id == sharedB[index], "same UTC day resolves identically for every caller/server")
+		check(not sharedSeen[id], `shared daily id "{id}" is unique`)
+		check(DailyQuestConfig.Get(id) ~= nil, `shared daily id "{id}" exists in the pool`)
+		sharedSeen[id] = true
+	end
+	for day = 20500, 20530 do
+		check(
+			#DailyQuestConfig.SharedDailyIds(day) == DailyQuestConfig.QUESTS_PER_DAY,
+			`UTC day {day} has exactly three quests`
+		)
 	end
 
 	-- ------------------------------------------------------------------

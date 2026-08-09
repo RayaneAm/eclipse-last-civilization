@@ -12,7 +12,7 @@ export type FacilityKind =
 	| "GamepassShowcase"
 	| "StarterPack"
 	| "CosmeticShop"
-	| "QuestNPC"
+	| "DailyQuestBoard"
 export type FacilityDefinition = {
 	id: string,
 	name: string,
@@ -25,13 +25,16 @@ export type FacilityDefinition = {
 }
 
 local HavenFacilityConfig = {
+	-- Bespoke: DailyQuestBoardGenerator authors the physical notice board, the
+	-- same way the Leaderboards hall authors its own. This entry only carries
+	-- the interaction contract FacilityController reads off the tagged anchor.
 	{
-		id = "QuestGiver",
-		name = "Survivor Guide",
-		description = "Begin your first steps.",
+		id = "DailyQuests",
+		name = "Daily Quests",
+		description = "Today's survivor tasks. Refreshes every day.",
 		district = "Onboarding",
-		kind = "QuestNPC",
-		localPosition = HavenLayoutConfig.GUIDE_LOCAL_POSITION,
+		kind = "DailyQuestBoard",
+		localPosition = HavenLayoutConfig.NOTICE_BOARD_LOCAL_POSITION,
 		frontDirection = Vector3.new(0, 0, 1),
 		bespoke = true,
 	},
@@ -42,7 +45,7 @@ local HavenFacilityConfig = {
 		district = "Progression",
 		kind = "UpgradeStation",
 		-- Shared 18-stud depth: rear edge lands on the east wall inner face.
-		localPosition = Vector3.new(67, 0, 50),
+		localPosition = Vector3.new(49, 0, 52),
 		frontDirection = Vector3.new(-1, 0, 0),
 		bespoke = false,
 	},
@@ -62,7 +65,7 @@ local HavenFacilityConfig = {
 		description = "Trade salvaged goods with the Merchant.",
 		district = "Commerce",
 		kind = "Market",
-		localPosition = Vector3.new(-67, 0, 45),
+		localPosition = Vector3.new(-49, 0, 52),
 		frontDirection = Vector3.new(1, 0, 0),
 		bespoke = false,
 	},
@@ -72,7 +75,7 @@ local HavenFacilityConfig = {
 		description = "Check in for supplies.",
 		district = "Commerce",
 		kind = "DailyRewards",
-		localPosition = Vector3.new(67, 0, 23),
+		localPosition = Vector3.new(49, 0, 25),
 		frontDirection = Vector3.new(-1, 0, 0),
 		bespoke = false,
 	},
@@ -82,7 +85,7 @@ local HavenFacilityConfig = {
 		description = "Decode recovered survival capsules.",
 		district = "Commerce",
 		kind = "CapsuleLab",
-		localPosition = Vector3.new(-67, 0, -11),
+		localPosition = Vector3.new(-49, 0, 0),
 		frontDirection = Vector3.new(1, 0, 0),
 		bespoke = false,
 	},
@@ -92,7 +95,7 @@ local HavenFacilityConfig = {
 		description = "Survivor clothing and field gear.",
 		district = "Commerce",
 		kind = "CosmeticShop",
-		localPosition = Vector3.new(-67, 0, 15),
+		localPosition = Vector3.new(-49, 0, 26),
 		frontDirection = Vector3.new(1, 0, 0),
 		bespoke = false,
 	},

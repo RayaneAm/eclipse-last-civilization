@@ -11,6 +11,8 @@ local BuildTutorialZone = require(script.Parent.BuildTutorialZone)
 local ValidateWorldComposition = require(script.Parent.ValidateWorldComposition)
 local ValidatePlayerSessionProfile = require(script.Parent.ValidatePlayerSessionProfile)
 local ValidateDailyQuests = require(script.Parent.ValidateDailyQuests)
+local ValidatePersonalBaseLayout = require(script.Parent.ValidatePersonalBaseLayout)
+local ValidatePersonalBaseSystems = require(script.Parent.ValidatePersonalBaseSystems)
 local EnvironmentService = require(ServerScriptService.Server.Services.EnvironmentService)
 
 local BuildCompleteWorld = {}
@@ -31,6 +33,12 @@ end
 function BuildCompleteWorld.Run()
 	runStage("Validating PlayerSession profile schema", ValidatePlayerSessionProfile.Run)
 	runStage("Validating Daily Quest pool + selection", ValidateDailyQuests.Run)
+	runStage("Validating Personal Base data + production", ValidatePersonalBaseSystems.Run)
+	runStage("Validating Personal Base layout config", function()
+		local report = ValidatePersonalBaseLayout.Run(nil)
+		assert(report.Passed, `[BuildCompleteWorld] Personal Base layout invalid: {table.concat(report.Errors, "; ")}`)
+		return report
+	end)
 	-- The remote terrain pass comes first: it is the slowest/destructive stage
 	-- and owns the one-time cleanup of legacy terrain outside the Haven core.
 	runStage("Building remote biome world", BuildWorldMap.Run)

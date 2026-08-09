@@ -1,8 +1,8 @@
 --!strict
 -- The single source of truth for a personal base's in-memory + persisted
 -- shape — mirrors PlayerSessionTypes.luau's own "data-only" convention.
--- BaseService owns the per-player table this describes; every other Phase
--- 4A base service (BuildingService, StorageService, ProductionService,
+-- BaseService owns the per-player table this describes; every other base
+-- service (BuildingService, StorageService, ProductionService,
 -- PowerService, DefenseReserveService) reads/writes its own slice via
 -- BaseService.Get(hostUserId) rather than keeping a second parallel table.
 
@@ -15,7 +15,7 @@ export type StructureInstance = {
 	Level: number,
 	Health: number,
 	Enabled: boolean?, -- power-consumer toggle state; nil for non-consumers
-	PadId: string?, -- Phase 4A.1: which BlueprintLayoutConfig pad this was built from, if any — nil for freeform-placed structures (and for pre-4A.1 saves until BaseService's migration links them)
+	PadId: string?, -- authored construction socket, if any; nil remains valid for freeform structures
 }
 
 export type ProductionJob = {
@@ -34,11 +34,8 @@ export type PowerState = {
 
 export type BaseSessionData = {
 	OwnerUserId: number,
-	-- Phase 4A.1: schema version, checked by BaseService on load to decide
-	-- whether migrateStructuresToPads needs to run before this session is
-	-- cached/used by anything else. New sessions are stamped at CURRENT
-	-- immediately (see NewDefault below); missing/older means "pre-4A.1
-	-- save, needs migration."
+	-- Checked before the session is exposed to gameplay. New sessions are
+	-- stamped at CURRENT; older saves pass through BaseSessionMigration.
 	SchemaVersion: number,
 	Level: number,
 	InvestmentScore: number,
@@ -56,9 +53,9 @@ local BaseSessionTypes = {}
 
 local STARTER_STORAGE_CAPACITY = 200
 
--- Bump whenever BaseSessionData's shape changes in a way BaseService's
--- migration needs to reconcile (see migrateStructuresToPads).
-BaseSessionTypes.CURRENT_SCHEMA_VERSION = 2
+-- Version 6 moves the stable perimeter socket ids to the true settlement
+-- boundary and formalizes multi-tier wall/gate structures on those sockets.
+BaseSessionTypes.CURRENT_SCHEMA_VERSION = 6
 
 function BaseSessionTypes.NewDefault(ownerUserId: number): BaseSessionData
 	return {
