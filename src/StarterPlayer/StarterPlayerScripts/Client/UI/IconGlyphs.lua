@@ -15,11 +15,11 @@ export type ItemDisplayDefinition = { Icon: string, AccentColor: Color3 }
 local FALLBACK: ItemDisplayDefinition = { Icon = "◆", AccentColor = Color3.fromRGB(160, 160, 170) }
 
 local IconGlyphs: { [string]: ItemDisplayDefinition } = {
-	Wood = { Icon = "🌳", AccentColor = Color3.fromRGB(150, 110, 70) },
-	Stone = { Icon = "⛰", AccentColor = Color3.fromRGB(150, 150, 155) },
-	Food = { Icon = "🍖", AccentColor = Color3.fromRGB(170, 200, 110) },
-	Hatchet = { Icon = "⛏", AccentColor = Color3.fromRGB(200, 200, 210) },
-	Scrap = { Icon = "⚙", AccentColor = Color3.fromRGB(230, 190, 90) },
+	Wood = { Icon = "W", AccentColor = Color3.fromRGB(150, 110, 70) },
+	Stone = { Icon = "S", AccentColor = Color3.fromRGB(150, 150, 155) },
+	Food = { Icon = "F", AccentColor = Color3.fromRGB(170, 200, 110) },
+	Hatchet = { Icon = "H", AccentColor = Color3.fromRGB(200, 200, 210) },
+	Scrap = { Icon = "Sc", AccentColor = Color3.fromRGB(230, 190, 90) },
 }
 
 local Lookup = {}

@@ -32,8 +32,14 @@ export type InteractionOptions = {
 local DEFAULT_HOVER_SCALE = 1.03
 local DEFAULT_PRESS_SCALE = 0.97
 
+-- Matched by CLASS rather than by name so this shares whatever UIScale the
+-- element already has (UIAnimator's stagger/press scale, a card's selected
+-- scale). Roblox honours only ONE UIScale per GuiObject, so a second one
+-- would leave either this feedback or the other effect silently dead. Both
+-- systems also tween through Motion's "Scale" channel, so the later effect
+-- cleanly supersedes the earlier one instead of the two fighting.
 local function getOrCreateScale(button: GuiButton): UIScale
-	local existing = button:FindFirstChild("HoverScale") :: UIScale?
+	local existing = button:FindFirstChildOfClass("UIScale")
 	if existing then
 		return existing
 	end

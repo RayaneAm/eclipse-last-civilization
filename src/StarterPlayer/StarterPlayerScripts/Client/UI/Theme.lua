@@ -1,121 +1,137 @@
 --!strict
--- Single source of truth for the premium UI system's visual language: colors,
--- spacing, corner radii, typography, and motion timings. Every new UI
--- component (src/client/UI/Components/) and every retrofitted hologram panel
--- reads from here instead of hand-rolling its own values, so the whole game
--- shares one consistent look instead of N slightly-different black panels.
---
--- Every value below is either lifted verbatim from the panel GateController
--- already established (black @ ~0.3 transparency, 1.5px stroke, Gotham
--- family) or derived from EclipseCoreGenerator's existing violet-blue
--- "Eclipse energy" palette (120,90,255 / 150,120,255 / 200,180,255) for the
--- generic brand accent — nothing here is an arbitrary new color scheme.
+-- Single source of truth for the ECLIPSE UI visual language: colors,
+-- spacing, corner radii, stroke weights, typography and motion timings.
 --
 -- ===========================================================================
--- ECLIPSE UI ART DIRECTION SYSTEM (Phase: UI/HUD Visual Direction Pass)
+-- ART DIRECTION (Facility UI Visual Rebuild pass)
 -- ===========================================================================
--- The concrete "when to use what" rules every screen in this system follows.
--- ECLIPSE's UI is a brighter, more playful layer OVER a dark survival world —
--- not a full light theme, and not a clone of any reference game consulted
--- for direction. Read this before adding a new panel/card/surface.
+-- The previous revision of this file produced a competent but generic dark
+-- dashboard: near-black panels, 1.5px hairline strokes, muted accents used
+-- sparingly, and cards that differed from their background by only a few
+-- shades. On screen that read as a web admin panel, not a Roblox game.
 --
--- SURFACES
---   PanelBackground — the outer panel of every screen, used exactly ONCE per
---     screen. This is the ONLY surface allowed a full-perimeter UIStroke.
---   CardBackground — a visibly lighter warm-neutral surface for nested rows/
---     cards/grouped sub-blocks (Surface.luau, OfferCard's "Stacked" cost
---     block). NEVER stroked — hierarchy comes from the background-shade step
---     + shadow, never a border.
---   HeroSurface (see Theme.HeroGradient below) — reserved for featured/hero
---     bands only (Shop's hero offers, Starter Pack, Marketplace's gated
---     banner). Deliberately rare so it reads as "special," never used for
---     ordinary rows.
---   Resource/material colors are NOT duplicated here — they stay owned by
---     ItemIconConfig.luau (per-item glyph + accent), which every economy
---     screen already reads from.
+-- This revision keeps ECLIPSE's dark survival identity but rebuilds the
+-- system around four rules taken from polished simulator/tycoon UI:
 --
--- ACCENT COLORS
---   Brand / BrandLight — core progression UI (Menu, general navigation).
---   Gold — premium/featured/promo ONLY (Starter Pack, "Featured" badges,
---     Premium tab). Kept exclusive to monetization/promo contexts so it
---     keeps meaning instead of becoming a second generic accent.
---   Teal — economy/trade-adjacent HUD entries (Shop, Supply Shop) so the HUD
---     reads as more than one repeated purple.
---   Danger — locked/blocked states, destructive actions, close-button glyph.
+--   1. LADDER, NOT MUD. Surfaces step up in clearly distinguishable stages
+--      (Void -> Panel -> Surface -> Card -> CardRaised). Each step is a
+--      visible jump, so a card always reads as sitting ON something rather
+--      than being a slightly different dark.
 --
--- TYPOGRAPHY
---   The existing Title/Heading/Body/Label/Caption/Stat scale stays as-is.
---   Font.Hero is reserved for hero-card headlines ONLY (Shop offers, Starter
---     Pack) — never for an ordinary panel title.
+--   2. DARK OUTLINES ON BRIGHT SHAPES. Strokes are near-black (Theme.Colors
+--      .Void), not accent-tinted hairlines, and they are 2-3px. This is what
+--      produces the chunky, sticker-like, tactile look — a 1px accent border
+--      reads as a web control at any size.
 --
--- DEPTH
---   Shadow (default) — buttons, list rows.
---   Shadow.Card — nested cards (Surface, OfferCard): slightly larger offset.
---   Shadow.Hero — hero bands and HUD icons (which float directly over the
---     busy 3D world and need more separation than an in-panel card): the
---     strongest offset/opacity. Bigger/more prominent surfaces get
---     proportionally stronger shadows, never the reverse.
+--   3. ACCENTS CARRY MEANING AND ARE SATURATED. The palette below is a full
+--      spectrum of vivid hues, one per facility/state, rather than one purple
+--      reused everywhere. Accents appear on headers, icon holders, buttons,
+--      meters and strips — never as a full-panel wash.
 --
--- BORDER RULE (the actual fix for "border-inside-border")
---   Exactly ONE stroked surface per screen: the outer GlassPanel. Every
---   nested surface (Surface, CardBackground blocks, HeroSurface bands) is
---   stroke-free — differentiated by background shade + shadow only. The
---   only components allowed a thin stroke besides the outer panel are small
---   chips (Pill, StatusBadge) since they're not "boxes."
+--   4. NOTHING IS FLAT. Buttons and cards get a darker bottom lip plus a
+--      top highlight, which is what makes them look pressable.
+--
+-- SURFACE ROLES
+--   Void        — strokes, shadows, the darkest possible ink. Never a fill
+--                 for a large area.
+--   PanelBackground — the modal body behind everything.
+--   Surface     — a content well inside the panel (scroll regions, groups).
+--   CardBackground  — ordinary rows and cards.
+--   CardRaised  — hover/selected/emphasis state of a card.
+--
+-- Resource/material colors are NOT duplicated here — they stay owned by
+-- ItemIconConfig + IconArt, which every economy screen reads from.
 -- ===========================================================================
 
 local Theme = {}
 
 Theme.Colors = {
-	PanelBackground = Color3.fromRGB(12, 11, 18), -- near-black with a cool violet undertone matching Brand, richer than flat black
-	CardBackground = Color3.fromRGB(32, 29, 42), -- visibly lighter than PanelBackground — nested rows/cards read as a real step up, not a stroke
-	Brand = Color3.fromRGB(140, 110, 255),
-	BrandLight = Color3.fromRGB(180, 160, 255),
-	BrandDim = Color3.fromRGB(100, 80, 200),
-	Gold = Color3.fromRGB(255, 190, 90), -- premium/featured/promo only — formalizes the value Starter Pack already hardcoded ad hoc
-	Teal = Color3.fromRGB(90, 200, 190), -- economy/trade HUD accent (Shop, Supply Shop)
-	Trade = Color3.fromRGB(80, 190, 225), -- player-to-player trading / marketplace
-	TextPrimary = Color3.new(1, 1, 1),
-	TextSecondary = Color3.fromRGB(215, 215, 220),
-	TextMuted = Color3.fromRGB(160, 160, 170),
-	Success = Color3.fromRGB(120, 220, 130),
-	Danger = Color3.fromRGB(220, 90, 90),
-	Warning = Color3.fromRGB(230, 160, 160),
+	-- --- Surface ladder -------------------------------------------------
+	-- Deliberately blue-violet rather than neutral grey: the whole UI reads
+	-- as one cool family, and warm accents (gold, orange) pop hard against it.
+	Void = Color3.fromRGB(10, 11, 22), -- strokes + shadows only
+	PanelBackground = Color3.fromRGB(27, 29, 51),
+	Surface = Color3.fromRGB(38, 41, 70),
+	CardBackground = Color3.fromRGB(52, 56, 94),
+	CardRaised = Color3.fromRGB(68, 73, 118),
+
+	-- --- Accent spectrum -------------------------------------------------
+	-- One vivid hue per facility/state (see FacilityStyle for the mapping).
+	Violet = Color3.fromRGB(150, 105, 255),
+	Blue = Color3.fromRGB(72, 148, 255),
+	Cyan = Color3.fromRGB(58, 205, 238),
+	Teal = Color3.fromRGB(42, 206, 180),
+	Green = Color3.fromRGB(92, 216, 112),
+	Lime = Color3.fromRGB(164, 226, 68),
+	Yellow = Color3.fromRGB(255, 206, 60),
+	Gold = Color3.fromRGB(255, 176, 48),
+	Orange = Color3.fromRGB(255, 134, 58),
+	Red = Color3.fromRGB(246, 82, 88),
+	Pink = Color3.fromRGB(255, 96, 176),
+	Magenta = Color3.fromRGB(216, 86, 236),
+
+	-- --- Semantic aliases -------------------------------------------------
+	-- Kept as the names the rest of the codebase already imports, so this
+	-- rebuild is a re-skin rather than a breaking API change.
+	Brand = Color3.fromRGB(150, 105, 255),
+	BrandLight = Color3.fromRGB(186, 155, 255),
+	BrandDim = Color3.fromRGB(96, 64, 178),
+	Trade = Color3.fromRGB(72, 148, 255),
+	Success = Color3.fromRGB(92, 216, 112),
+	Danger = Color3.fromRGB(246, 82, 88),
+	Warning = Color3.fromRGB(255, 176, 48),
+
+	-- --- Text -------------------------------------------------------------
+	TextPrimary = Color3.fromRGB(255, 255, 255),
+	TextSecondary = Color3.fromRGB(206, 210, 235),
+	TextMuted = Color3.fromRGB(150, 156, 190),
+	-- For text sitting ON a bright accent fill (header titles, rarity strips,
+	-- button labels on yellow/gold). White would smear on gold; this near-
+	-- black keeps contrast at every accent hue.
+	TextOnAccent = Color3.fromRGB(18, 16, 32),
 }
 
 Theme.Transparency = {
-	PanelBackground = 0.22, -- richer/less washed-out glass than the original 0.32
-	CardBackground = 0.08, -- deliberately much less transparent than PanelBackground so it reads as a real lighter surface, not a slightly-different shade of the same dark
-	StrokeDefault = 0.15,
-	StrokeSubtle = 0.2,
-	StrokeBright = 0.05,
-	GradientNear = 0.8,
-	GradientFar = 0.92,
+	-- Panels and cards are now essentially OPAQUE. The old glassy 0.22/0.08
+	-- let the 3D world bleed through every surface, which is the single
+	-- biggest reason the UI read as washed-out and low-contrast.
+	PanelBackground = 0,
+	CardBackground = 0,
+	StrokeDefault = 0,
+	StrokeSubtle = 0.35,
+	StrokeBright = 0,
+	GradientNear = 0.85,
+	GradientFar = 0.97,
+}
+
+-- Stroke weights. The chunky look lives here: important surfaces get a real
+-- 2-3px dark outline, not a hairline.
+Theme.Stroke = {
+	Panel = 3, -- the outer modal edge
+	Card = 2, -- cards, buttons, chips
+	Thin = 1.5, -- inner dividers, small badges
 }
 
 Theme.Shadow = {
-	Transparency = 0.6,
-	Offset = Vector2.new(0, 4),
+	Transparency = 0.45,
+	Offset = Vector2.new(0, 5),
 	Color = Color3.new(0, 0, 0),
-	-- Nested cards (Surface, OfferCard) — slightly stronger than the default
-	-- so a card reads as sitting above the panel behind it.
 	Card = {
-		Transparency = 0.5,
+		Transparency = 0.4,
 		Offset = Vector2.new(0, 6),
 	},
-	-- Hero bands and HUD icons — the strongest depth in the system, reserved
-	-- for surfaces that need to separate from a busy background (the 3D
-	-- world behind HUD icons, or a featured offer band).
 	Hero = {
-		Transparency = 0.4,
-		Offset = Vector2.new(0, 8),
+		Transparency = 0.3,
+		Offset = Vector2.new(0, 10),
 	},
 }
 
+-- Chunkier than before across the board — small radii on big shapes are a
+-- large part of what made the old panels feel like web dialogs.
 Theme.Corner = {
-	Small = UDim.new(0, 6),
-	Medium = UDim.new(0, 8),
-	Large = UDim.new(0, 16),
+	Small = UDim.new(0, 8),
+	Medium = UDim.new(0, 14),
+	Large = UDim.new(0, 22),
 	Pill = UDim.new(1, 0),
 }
 
@@ -131,27 +147,22 @@ Theme.Spacing = {
 
 export type FontStyle = { Font: Enum.Font, Size: number }
 
+-- Weights pushed heavier and sizes up. GothamBlack for anything structural
+-- (titles, stats, buttons) so hierarchy is obvious at a glance on a phone.
 Theme.Font = {
-	Title = { Font = Enum.Font.GothamBlack, Size = 20 },
-	Heading = { Font = Enum.Font.GothamBold, Size = 16 },
-	Body = { Font = Enum.Font.Gotham, Size = 13 },
-	Label = { Font = Enum.Font.GothamMedium, Size = 12 },
-	Caption = { Font = Enum.Font.Gotham, Size = 11 },
-	-- Numeric HUD readouts (currency, XP) — same size as Heading, but Black
-	-- weight so weight alone differentiates "this is a stat" from "this is a
-	-- label," a common premium-HUD hierarchy technique.
-	Stat = { Font = Enum.Font.GothamBlack, Size = 16 },
-	-- Hero-card headlines ONLY (Shop offers, Starter Pack) — bigger than
-	-- Title so a featured offer's name reads as the visual anchor of the
-	-- card. Never used for an ordinary panel title.
-	Hero = { Font = Enum.Font.GothamBlack, Size = 28 },
+	Title = { Font = Enum.Font.GothamBlack, Size = 24 },
+	Heading = { Font = Enum.Font.GothamBold, Size = 17 },
+	Body = { Font = Enum.Font.GothamMedium, Size = 14 },
+	Label = { Font = Enum.Font.GothamBold, Size = 12 },
+	Caption = { Font = Enum.Font.GothamMedium, Size = 11 },
+	Stat = { Font = Enum.Font.GothamBlack, Size = 18 },
+	Hero = { Font = Enum.Font.GothamBlack, Size = 32 },
+	-- Button labels: black weight, slightly tighter than Heading so a CTA
+	-- reads as a control rather than a sentence.
+	Button = { Font = Enum.Font.GothamBlack, Size = 16 },
 }
 
--- The one HeroSurface gradient used by every hero band (HeroOffer, OfferCard's
--- "Stacked" preview plate) — accent color toward a darker version of itself,
--- rather than a flat fill, so featured surfaces read as richer/more premium
--- than an ordinary CardBackground block. Centralized here (not hand-rolled
--- per component) so "hero" always means the same visual treatment.
+-- The one "hero"/featured gradient, accent toward a darker version of itself.
 function Theme.HeroGradient(accentColor: Color3): UIGradient
 	local gradient = Instance.new("UIGradient")
 	gradient.Name = "HeroGradient"
@@ -160,20 +171,44 @@ function Theme.HeroGradient(accentColor: Color3): UIGradient
 	return gradient
 end
 
--- Every duration/easing here stays inside the vocabulary already established
--- across GateController/AmbientController/CameraIntroController: Quad/Out,
--- durations clustering 0.15-0.6s. No Back/Bounce/Elastic anywhere.
+-- The top-highlight -> base gradient that makes a filled shape look lit from
+-- above. Used by buttons, header bars and icon holders; this plus the darker
+-- bottom lip is the whole "3D chunky" trick, at zero runtime cost.
+function Theme.GlossGradient(accentColor: Color3): UIGradient
+	local gradient = Instance.new("UIGradient")
+	gradient.Name = "Gloss"
+	gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, accentColor:Lerp(Color3.new(1, 1, 1), 0.28)),
+		ColorSequenceKeypoint.new(0.55, accentColor),
+		ColorSequenceKeypoint.new(1, accentColor:Lerp(Color3.new(0, 0, 0), 0.18)),
+	})
+	gradient.Rotation = 90
+	return gradient
+end
+
+-- Attaches the standard dark outline. Centralized so "how thick, what color"
+-- is answered once rather than per component.
+function Theme.Outline(parent: GuiObject, thickness: number?, color: Color3?): UIStroke
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "Outline"
+	stroke.Color = color or Theme.Colors.Void
+	stroke.Thickness = thickness or Theme.Stroke.Card
+	stroke.Transparency = 0
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = parent
+	return stroke
+end
+
+-- Motion. Faster and snappier than the previous 0.35s panel timings — game
+-- UI should feel immediate. Still Quad only; no Back/Bounce/Elastic.
 Theme.Motion = {
-	HoverIn = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	HoverOut = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	PressDown = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	PressUp = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	PanelOpen = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	PanelClose = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Fade = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	-- Continuous ambient glow (icon-tile pulse) — Sine/InOut is the
-	-- vocabulary already used for smooth continuous motion (camera work),
-	-- never Quad/InOut and never a new easing family.
+	HoverIn = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	HoverOut = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	PressDown = TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	PressUp = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	PanelOpen = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	PanelClose = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Fade = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	Pulse = TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 }
 

@@ -1,9 +1,12 @@
 --!strict
--- Inventory/Crafting/Shop/Marketplace/Base UI tab switcher. Active tab is a
--- filled rounded pill (accent color, white text); inactive tabs stay plain
--- muted text — no stroke on either state (see Theme.luau's art-direction
--- header). Replaces the previous thin-underline treatment, which read as
--- too subtle to register as "this is a tab control."
+-- Tab switcher. The selected tab is a filled accent PILL with a dark outline
+-- and a darker lip; unselected tabs are recessed dark slabs.
+--
+-- The previous version tinted the active tab's background and left inactive
+-- ones fully transparent, which read as plain web nav — at a glance you
+-- could not tell it was a control at all. Making every tab a visible object
+-- and the selected one an obviously raised, colored pill is what the brief
+-- asks for (§16) and matches how the rest of this system now builds buttons.
 
 local Theme = require(script.Parent.Parent.Theme)
 local Motion = require(script.Parent.Parent.Motion)
@@ -26,20 +29,25 @@ export type TabStripOptions = {
 	Parent: Instance?,
 }
 
--- Returns (container, selectTab, buttons). `buttons` is exposed so the caller
--- can chain it into GamepadNav wiring alongside the rest of the panel.
+local function labelColorFor(fill: Color3): Color3
+	local luminance = 0.299 * fill.R + 0.587 * fill.G + 0.114 * fill.B
+	return if luminance > 0.62 then Theme.Colors.TextOnAccent else Theme.Colors.TextPrimary
+end
+
 function TabStrip.new(options: TabStripOptions): (Frame, (tabId: string) -> (), { TextButton })
-	local accentColor = options.AccentColor or Theme.Colors.Brand
+	local accent = options.AccentColor or Theme.Colors.Brand
+	local activeText = labelColorFor(accent)
 
 	local container = Instance.new("Frame")
 	container.Name = options.Name or "TabStrip"
-	container.Size = options.Size or UDim2.new(1, 0, 0, 36)
+	container.Size = options.Size or UDim2.new(1, 0, 0, 40)
 	container.Position = options.Position or UDim2.fromScale(0, 0)
 	container.AnchorPoint = options.AnchorPoint or Vector2.new(0, 0)
 	container.BackgroundTransparency = 1
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
 	layout.Padding = UDim.new(0, Theme.Spacing.S)
 	layout.Parent = container
 
@@ -48,13 +56,23 @@ function TabStrip.new(options: TabStripOptions): (Frame, (tabId: string) -> (), 
 	local function refreshVisual(activeId: string)
 		for _, tab in options.Tabs do
 			local button = container:FindFirstChild(tab.Id) :: TextButton?
-			if button then
-				local isActive = tab.Id == activeId
-				Motion.Tween(button, "TabFill", Theme.Motion.HoverIn, { BackgroundTransparency = if isActive then 0.05 else 1 })
-				local label = button:FindFirstChild("Label") :: TextLabel?
-				if label then
-					label.TextColor3 = if isActive then Theme.Colors.TextPrimary else Theme.Colors.TextMuted
-				end
+			if not button then
+				continue
+			end
+			local isActive = tab.Id == activeId
+			local label = button:FindFirstChild("Label") :: TextLabel?
+			local stroke = button:FindFirstChildOfClass("UIStroke")
+
+			Motion.Tween(button, "TabFill", Theme.Motion.HoverIn, {
+				BackgroundColor3 = if isActive then accent else Theme.Colors.CardBackground,
+			})
+			if label then
+				Motion.Tween(label, "TabText", Theme.Motion.HoverIn, {
+					TextColor3 = if isActive then activeText else Theme.Colors.TextMuted,
+				})
+			end
+			if stroke then
+				stroke.Transparency = if isActive then 0 else 0.45
 			end
 		end
 	end
@@ -65,11 +83,11 @@ function TabStrip.new(options: TabStripOptions): (Frame, (tabId: string) -> (), 
 		local button = Instance.new("TextButton")
 		button.Name = tab.Id
 		button.AutomaticSize = Enum.AutomaticSize.X
-		button.Size = UDim2.new(0, 0, 1, 0)
+		button.Size = UDim2.new(0, 0, 0, 34)
 		button.AutoButtonColor = false
 		button.Text = ""
-		button.BackgroundColor3 = accentColor
-		button.BackgroundTransparency = 1
+		button.BackgroundColor3 = Theme.Colors.CardBackground
+		button.BackgroundTransparency = 0
 		button.BorderSizePixel = 0
 		button.Parent = container
 
@@ -77,9 +95,11 @@ function TabStrip.new(options: TabStripOptions): (Frame, (tabId: string) -> (), 
 		corner.CornerRadius = Theme.Corner.Pill
 		corner.Parent = button
 
+		Theme.Outline(button, Theme.Stroke.Thin)
+
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, Theme.Spacing.M)
-		padding.PaddingRight = UDim.new(0, Theme.Spacing.M)
+		padding.PaddingLeft = UDim.new(0, Theme.Spacing.L)
+		padding.PaddingRight = UDim.new(0, Theme.Spacing.L)
 		padding.Parent = button
 
 		local label = Instance.new("TextLabel")
@@ -87,10 +107,10 @@ function TabStrip.new(options: TabStripOptions): (Frame, (tabId: string) -> (), 
 		label.AutomaticSize = Enum.AutomaticSize.X
 		label.Size = UDim2.new(0, 0, 1, 0)
 		label.BackgroundTransparency = 1
-		label.Font = Theme.Font.Heading.Font
-		label.TextSize = Theme.Font.Heading.Size
+		label.Font = Theme.Font.Label.Font
+		label.TextSize = Theme.Font.Label.Size
 		label.TextColor3 = Theme.Colors.TextMuted
-		label.Text = tab.Label
+		label.Text = string.upper(tab.Label)
 		label.Parent = button
 
 		table.insert(buttons, button)

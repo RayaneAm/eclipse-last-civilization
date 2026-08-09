@@ -1,11 +1,18 @@
 --!strict
--- Soft rounded "nested card" surface — the concrete fix for border-inside-
--- border. Uses Theme.Colors.CardBackground (a real lighter step, not a
--- slightly-different dark) + Theme.Shadow.Card, and NEVER attaches a
--- UIStroke — see Theme.luau's art-direction header for the border rule this
--- enforces. Replaces the repeated `GlassPanel.new({ Stroke = false, Gradient
--- = false })` ad hoc pattern that was previously copy-pasted across
--- BaseUIController's rows and various shop panels.
+-- The nested card surface: a rounded slab on Theme.Colors.CardBackground
+-- with a dark outline.
+--
+-- The old rule here was "nested surfaces are NEVER stroked — hierarchy comes
+-- from background shade alone." That rule came from a palette where every
+-- surface was a near-identical dark, and stroking them stacked accent
+-- hairlines into visible border-in-border noise.
+--
+-- The rebuilt palette changes the calculus: strokes are near-black (not
+-- accent-tinted), so they read as the card's own edge rather than a second
+-- frame, and the surface ladder now steps far enough that a stroke
+-- reinforces the step instead of substituting for it. Dark outlines on
+-- lighter cards are precisely what produces the chunky, sticker-like look
+-- this pass is after — the previous unstroked cards dissolved into the panel.
 
 local Theme = require(script.Parent.Parent.Theme)
 local Shadow = require(script.Parent.Parent.Shadow)
@@ -20,6 +27,10 @@ export type SurfaceOptions = {
 	CornerRadius: UDim?,
 	AutomaticSize: Enum.AutomaticSize?,
 	DropShadow: boolean?,
+	-- Opt out of the outline for a surface nested inside an already-outlined
+	-- card (an inner well), where a second edge would be noise.
+	Outline: boolean?,
+	Color: Color3?,
 	LayoutOrder: number?,
 	Parent: Instance?,
 }
@@ -34,13 +45,17 @@ function Surface.new(options: SurfaceOptions): Frame
 	if options.AutomaticSize then
 		surface.AutomaticSize = options.AutomaticSize
 	end
-	surface.BackgroundColor3 = Theme.Colors.CardBackground
-	surface.BackgroundTransparency = Theme.Transparency.CardBackground
+	surface.BackgroundColor3 = options.Color or Theme.Colors.CardBackground
+	surface.BackgroundTransparency = 0
 	surface.BorderSizePixel = 0
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = options.CornerRadius or Theme.Corner.Medium
 	corner.Parent = surface
+
+	if options.Outline ~= false then
+		Theme.Outline(surface, Theme.Stroke.Card)
+	end
 
 	surface.Parent = options.Parent
 

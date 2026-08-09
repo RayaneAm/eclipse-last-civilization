@@ -76,7 +76,12 @@ local function build()
 	screenGui.Name = "ConfirmDialogUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 50 -- always above other panels
+	-- Above the facility modal layer (50), which is what raises this dialog:
+	-- Production's cancel-job and the trader's sell-below-reserve warnings are
+	-- both asked from an open facility screen. At an equal DisplayOrder the
+	-- winner would depend on ScreenGui ordering rather than intent, so this
+	-- sits deliberately one band higher. Stays below Notifications (60).
+	screenGui.DisplayOrder = 54
 	screenGui.Parent = playerGui
 
 	backdrop = Instance.new("CanvasGroup")

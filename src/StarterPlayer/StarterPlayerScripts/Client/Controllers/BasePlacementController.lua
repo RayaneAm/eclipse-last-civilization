@@ -30,7 +30,6 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Interaction = require(script.Parent.Parent.UI.Interaction)
 local GlassPanel = require(script.Parent.Parent.UI.Components.GlassPanel)
 local Button = require(script.Parent.Parent.UI.Components.Button)
-local IconTile = require(script.Parent.Parent.UI.Components.IconTile)
 local NotificationController = require(script.Parent.NotificationController)
 
 local BasePlacementController = {}
@@ -166,6 +165,9 @@ local function updateGhostAt(worldPosition: Vector3)
 	isValid = withinBoundsLocal(snappedLocal) and withinFreeformZoneLocal(snappedLocal) and not insideProtectedZoneLocal(snappedLocal)
 	ghost.CFrame = worldCFrame * CFrame.new(0, ghost.Size.Y / 2, 0)
 	ghost.Color = if isValid then Color3.fromRGB(120, 220, 130) else Color3.fromRGB(220, 90, 90)
+	if BasePlacementController._placeButton then
+		Interaction.SetDisabled(BasePlacementController._placeButton, not isValid or isSubmitting)
+	end
 end
 
 local function currentGhostWorldCFrame(): CFrame?
@@ -245,6 +247,10 @@ local function beginGhostFor(buildingId: string)
 	if BasePlacementController._hudFrame then
 		BasePlacementController._hudFrame.Visible = true
 	end
+	if BasePlacementController._placementTitle then
+		local definition = BuildingConfig.Get(buildingId)
+		BasePlacementController._placementTitle.Text = `PLACING {string.upper(if definition then definition.Name else buildingId)}`
+	end
 end
 
 -- ---------------------------------------------------------------------
@@ -258,7 +264,7 @@ function BasePlacementController:_buildUI()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "BasePlacementUI"
 	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
+	screenGui.IgnoreGuiInset = false
 	screenGui.Parent = playerGui
 	self._trove:Add(screenGui)
 
@@ -322,50 +328,66 @@ function BasePlacementController:_buildUI()
 	})
 
 	-- Rotate/Place/Cancel HUD, shown while a ghost is active.
-	local hudFrame = Instance.new("Frame")
-	hudFrame.Name = "PlacementHUD"
-	hudFrame.Size = UDim2.new(0, 260, 0, 64)
-	hudFrame.Position = UDim2.new(0.5, 0, 1, -Theme.Spacing.L)
-	hudFrame.AnchorPoint = Vector2.new(0.5, 1)
-	hudFrame.BackgroundTransparency = 1
+	local hudFrame = GlassPanel.new({
+		Name = "PlacementHUD",
+		Size = UDim2.new(0.94, 0, 0, 94),
+		Position = UDim2.new(0.5, 0, 1, -Theme.Spacing.M),
+		AnchorPoint = Vector2.new(0.5, 1),
+		CornerRadius = Theme.Corner.Medium,
+		AccentColor = Theme.Colors.Brand,
+		Gradient = false,
+		Parent = screenGui,
+	})
 	hudFrame.Visible = false
-	hudFrame.Parent = screenGui
 	self._hudFrame = hudFrame
 
-	local hudLayout = Instance.new("UIListLayout")
-	hudLayout.FillDirection = Enum.FillDirection.Horizontal
-	hudLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	hudLayout.Padding = UDim.new(0, Theme.Spacing.S)
-	hudLayout.Parent = hudFrame
+	local hudConstraint = Instance.new("UISizeConstraint")
+	hudConstraint.MinSize = Vector2.new(300, 94)
+	hudConstraint.MaxSize = Vector2.new(520, 94)
+	hudConstraint.Parent = hudFrame
 
-	-- Phase 4A.1: swapped from dingbat/symbol glyphs (↻/✓/✕) to emoji —
-	-- Roblox's default UI font reliably covers emoji but not the dingbat
-	-- block those characters sit in, which is what produced the
-	-- "placeholder square" bug CloseButton also had (see that component's
-	-- own rewrite for the full root-cause explanation).
-	local _rotateContainer, rotateButton = IconTile.new({
-		Icon = "🔄",
-		TileSize = UDim2.fromOffset(56, 56),
+	local placementTitle = Instance.new("TextLabel")
+	placementTitle.Name = "PlacementTitle"
+	placementTitle.Position = UDim2.fromOffset(10, 6)
+	placementTitle.Size = UDim2.new(1, -20, 0, 22)
+	placementTitle.BackgroundTransparency = 1
+	placementTitle.Font = Theme.Font.Heading.Font
+	placementTitle.TextSize = Theme.Font.Heading.Size
+	placementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	placementTitle.TextColor3 = Theme.Colors.TextPrimary
+	placementTitle.Text = "PLACING STRUCTURE"
+	placementTitle.Parent = hudFrame
+	self._placementTitle = placementTitle
+
+	local rotateButton = Button.new({
+		Text = "ROTATE [R]",
+		Variant = "Secondary",
+		Size = UDim2.new(1 / 3, -10, 0, 46),
+		Position = UDim2.new(0, 8, 0, 36),
 		OnActivated = function()
 			rotationDegrees = (rotationDegrees + 90) % 360
 		end,
 		Parent = hudFrame,
 	})
 
-	local _placeContainer, placeButton = IconTile.new({
-		Icon = "✅",
+	local placeButton = Button.new({
+		Text = "PLACE",
+		Variant = "Primary",
 		AccentColor = Theme.Colors.Success,
-		TileSize = UDim2.fromOffset(56, 56),
+		Size = UDim2.new(1 / 3, -10, 0, 46),
+		Position = UDim2.new(1 / 3, 5, 0, 36),
 		OnActivated = function()
 			submitPlacement()
 		end,
 		Parent = hudFrame,
 	})
 
-	local _cancelContainer, cancelButton = IconTile.new({
-		Icon = "❌",
+	local cancelButton = Button.new({
+		Text = "CANCEL [X]",
+		Variant = "Secondary",
 		AccentColor = Theme.Colors.Danger,
-		TileSize = UDim2.fromOffset(56, 56),
+		Size = UDim2.new(1 / 3, -10, 0, 46),
+		Position = UDim2.new(2 / 3, 2, 0, 36),
 		OnActivated = function()
 			BasePlacementController.CancelPlacement()
 		end,

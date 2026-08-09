@@ -22,6 +22,7 @@ local PlayerMarketConfig = require(ReplicatedStorage.Shared.Config.PlayerMarketC
 
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Motion = require(script.Parent.Parent.UI.Motion)
+local FacilityRouter = require(script.Parent.Parent.UI.FacilityRouter)
 local GamepadNav = require(script.Parent.Parent.UI.GamepadNav)
 local GlassPanel = require(script.Parent.Parent.UI.Components.GlassPanel)
 local CloseButton = require(script.Parent.Parent.UI.Components.CloseButton)
@@ -303,7 +304,7 @@ function PlayerMarketController:_refreshListings(category: string)
 	if not ok or not listings or #listings == 0 then
 		EmptyState.new({
 			Card = true,
-			Icon = "📭",
+			Glyph = "Market",
 			Text = "No listings yet",
 			Subtext = "Be the first to list an item once trading goes live.",
 			Parent = self._listings,
@@ -323,6 +324,12 @@ end
 function PlayerMarketController:Init()
 	self._trove = Trove.new()
 	self:_buildPanel()
+
+	-- Lets the Survivor Market's "MY LISTINGS" tab hand off to this existing
+	-- panel instead of a second listings UI being built alongside it.
+	FacilityRouter.Register("Marketplace", function()
+		PlayerMarketController.Open()
+	end)
 end
 
 function PlayerMarketController.Open()

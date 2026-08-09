@@ -4,12 +4,13 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Shadow = require(script.Parent.Parent.Shadow)
+local ItemIcon = require(script.Parent.ItemIcon)
 
 local ItemCell = {}
 
 export type ItemCellOptions = {
 	Name: string?,
-	Icon: string,
+	ItemId: string,
 	Label: string,
 	AccentColor: Color3?,
 	Size: UDim2?,
@@ -55,18 +56,14 @@ function ItemCell.new(options: ItemCellOptions): (Frame, Frame)
 	padding.PaddingBottom = UDim.new(0, Theme.Spacing.S)
 	padding.Parent = cell
 
-	local icon = Instance.new("TextLabel")
-	icon.Name = "Icon"
-	icon.Size = UDim2.new(1, 0, 0, 40)
-	icon.LayoutOrder = 1
-	icon.BackgroundTransparency = 1
-	icon.Font = Enum.Font.GothamBold
-	icon.TextSize = 30
-	icon.TextColor3 = Theme.Colors.TextPrimary
-	icon.TextStrokeColor3 = Color3.new(0, 0, 0)
-	icon.TextStrokeTransparency = 0.6
-	icon.Text = options.Icon
-	icon.Parent = cell
+	ItemIcon.new({
+		Name = "Icon",
+		ItemId = options.ItemId,
+		Size = UDim2.fromOffset(42, 42),
+		LayoutOrder = 1,
+		AccentOverride = accentColor,
+		Parent = cell,
+	})
 
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
